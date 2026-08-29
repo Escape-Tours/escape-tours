@@ -1,3 +1,5 @@
+// lib/utils/price-translator.ts
+
 export type ResidencyTier = 'CITIZEN' | 'RESIDENT' | 'INTERNATIONAL';
 
 export const getStandardizedPrice = (
@@ -11,18 +13,39 @@ export const getStandardizedPrice = (
   // If basePrice is already a flat number, return it immediately
   if (typeof basePrice === 'number') return basePrice;
 
-  // Handle flat object where tiers might be top-level keys directly (e.g., { INTERNATIONAL: 450, CITIZEN: 50 })
-  let data = basePrice[tier];
-  
-  if (typeof data === 'undefined') {
-    const matchedKey = Object.keys(basePrice).find(k => k.toUpperCase() === tier.toUpperCase());
+  const upperTier = String(tier || 'INTERNATIONAL').toUpperCase();
+
+  // Flexible database key aliases per tier to capture variants like non_resident, foreigner, tanzanian, expat, etc.
+  const tierKeys: Record<ResidencyTier, string[]> = {
+    CITIZEN: ['CITIZEN', 'citizen', 'TZS', 'tzs', 'Local', 'local', 'tanzanian', 'Tanzanian', 'EAST_AFRICAN'],
+    RESIDENT: ['RESIDENT', 'resident', 'EXPAT', 'expat', 'TANZANIAN_RESIDENT', 'east_african'],
+    INTERNATIONAL: ['INTERNATIONAL', 'international', 'FOREIGN', 'foreign', 'USD', 'usd', 'NON_RESIDENT', 'non_resident', 'foreigner']
+  };
+
+  let data: any = undefined;
+
+  // Try finding a matching key using our alias map
+  const allowedKeys = tierKeys[upperTier as ResidencyTier] || [upperTier];
+  for (const k of allowedKeys) {
+    if (basePrice[k] !== undefined && basePrice[k] !== null) {
+      data = basePrice[k];
+      break;
+    }
+  }
+
+  // Fallback to case-insensitive match against top-level keys
+  if (data === undefined) {
+    const matchedKey = Object.keys(basePrice).find(k => 
+      allowedKeys.some(alias => k.toLowerCase() === alias.toLowerCase())
+    );
     if (matchedKey) {
       data = basePrice[matchedKey];
-    } else if (typeof basePrice.CITIZEN === 'number' || typeof basePrice.INTERNATIONAL === 'number' || typeof basePrice.RESIDENT === 'number') {
-      return 0;
-    } else {
-      data = basePrice;
     }
+  }
+
+  // If no tier match is found, do NOT fallback to the raw object (which exposes international rates).
+  if (data === undefined) {
+    return 0;
   }
 
   // 2. Direct number for the specific tier
@@ -30,7 +53,6 @@ export const getStandardizedPrice = (
 
   // 3. Handle object structures (Lodges with rooms/seasons)
   if (typeof data === 'object' && data !== null) {
-    
     // A. Room Category Drill-down (If specific room type is requested)
     if (selectedRoomType && data[selectedRoomType]) {
       const roomData = data[selectedRoomType];

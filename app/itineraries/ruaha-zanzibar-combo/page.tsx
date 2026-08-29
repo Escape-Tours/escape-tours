@@ -1,6 +1,5 @@
-
-import {  } from "@/components/footer"
-import { WhatsAppFloat } from "@/components/whatsapp-float"
+import Footer from "@/components/footer"
+import WhatsAppFloat from "@/components/whatsapp-float"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -12,7 +11,6 @@ const PESAPAL_BOOKING_URL = "https://store.pesapal.com/escapetours"
 export default function RuahaZanzibarComboPage() {
   return (
     <div className="min-h-screen">
-     
       <main>
         {/* Hero Section */}
         <section className="relative h-[60vh] min-h-[500px] w-full">
@@ -313,7 +311,7 @@ export default function RuahaZanzibarComboPage() {
           </div>
         </section>
       </main>
-      < />
+      <Footer />
       <WhatsAppFloat />
     </div>
   )

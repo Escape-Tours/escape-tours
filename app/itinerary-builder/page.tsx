@@ -9,13 +9,12 @@ import { SlideTrigger } from '@/components/ui/SlideTrigger';
 import { ItineraryBuilder } from './ItineraryCategoryExplorer';
 import DayCard from '@/components/itinerary/DayCard';
 import AIAssistantDrawer from '@/components/itinerary/AIAssistantDrawer';
-import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, Download } from 'lucide-react';
+import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, ShieldCheck, Download } from 'lucide-react';
 import { saveItinerary } from '@/lib/services/itineraryService';
 import { validatePayload } from '@/lib/services/stagingValidator';
 import { Day, ItineraryItem } from '@/lib/types/itinerary-types';
 import { ResidencyTier } from '@/lib/constants/index';
 import { supabase } from '@/lib/supabase/client';
-import html2canvas from 'html2canvas-pro';
 
 const ItineraryMapOverlay = dynamic(() => import('@/components/itinerary/ItineraryMapOverlay'), { 
   ssr: false,
@@ -41,7 +40,7 @@ export const SafariStudio = () => {
     }
   ]);
   
-  const [residencyTier, setResidencyTier] = useState<ResidencyTier>('INTERNATIONAL'); 
+  const [residencyTier, setResidencyTier] = useState<ResidencyTier>('CITIZEN'); 
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
@@ -51,26 +50,35 @@ export const SafariStudio = () => {
   const [aiActivityNotice, setAiActivityNotice] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
-  // Authentication Firewall Check
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuthAndProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setIsAuthenticated(false);
         setDays([]); 
       } else {
         setIsAuthenticated(true);
+        // Fix Supabase TS overload by casting or querying the dynamic table safely if needed, 
+        // or ensuring table name matches typed schema. Using any/explicit cast to fix the overload issue.
+        const { data: profile } = await (supabase
+          .from('profiles' as any) as any)
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile && 'residency_tier' in profile && profile.residency_tier) {
+          setResidencyTier(profile.residency_tier as ResidencyTier);
+        }
       }
       setSessionChecked(true);
     };
-    checkAuth();
+    checkAuthAndProfile();
   }, []);
 
   const allItineraryItems = useMemo(() => {
     return days.flatMap(day => day.slots.map(s => ({ ...s, dayNumber: day.day_number })).filter(s => s.item !== null)) as (Day['slots'][0] & { item: ItineraryItem; dayNumber: number })[];
   }, [days]);
 
-  // Calculate live financial quote based on residency tier and guest count
   const estimatedTotal = useMemo(() => {
     const totalAdults = Math.max(1, guests.adults);
     const totalChildren = Math.max(0, guests.children);
@@ -91,7 +99,6 @@ export const SafariStudio = () => {
     }, 0);
   }, [allItineraryItems, residencyTier, guests]);
 
-  // Adaptive Theme Logic
   const containerTheme = useMemo(() => {
     const rawItems = allItineraryItems.map(s => s.item);
     const isMarine = rawItems.some(item => item.metadata?.type === 'MARINE' || item.name?.toLowerCase().includes('zanzibar') || item.name?.toLowerCase().includes('seafront'));
@@ -167,9 +174,9 @@ export const SafariStudio = () => {
       const element = printRef.current;
 
       const options = {
-        margin: [10, 10, 10, 10] as [number, number, number, number],
+        margin: [5, 5, 5, 5] as [number, number, number, number],
         filename: 'Safari-Odyssey-Masterpiece.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
+        image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { 
           scale: 2, 
           useCORS: true, 
@@ -184,18 +191,24 @@ export const SafariStudio = () => {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
-              .bg-slate-950, .bg-slate-900 {
+              body, .bg-slate-950, .bg-slate-900 {
                 background-color: #020617 !important;
+                color: #ffffff !important;
               }
-              /* Hide interactive elements or scrollbars during print snapshot generation */
-              button, .absolute {
-                /* keep visible if needed, or adjust */
+              .text-slate-400 {
+                color: #94a3b8 !important;
+              }
+              .text-slate-300 {
+                color: #cbd5e1 !important;
+              }
+              button, .no-print {
+                display: none !important;
               }
             `;
             clonedDoc.head.appendChild(style);
           }
         },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const }
       };
 
       await html2pdf().from(element).set(options).save();
@@ -253,8 +266,8 @@ export const SafariStudio = () => {
         <ItineraryMapOverlay locations={mapLocations} />
       </div>
 
-      <aside className={`relative h-full p-5 z-25 transition-all duration-700 ease-in-out ${isBrowsing ? 'w-[440px]' : 'w-[490px]'}`}>
-        <div className={`h-full ${containerTheme.base} rounded-[2.5rem] border shadow-2xl p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
+      <aside className={`relative h-full p-5 z-25 transition-all duration-700 ease-in-out ${isBrowsing ? 'w-[680px]' : 'w-[740px]'}`}>
+        <div ref={printRef} className={`h-full ${containerTheme.base} rounded-[2.5rem] border shadow-2xl p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
           
           {!isAuthenticated && (
             <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
@@ -273,7 +286,7 @@ export const SafariStudio = () => {
             </div>
           )}
 
-          <div className="flex justify-between items-center mb-6 pb-5 border-b border-white/10">
+          <div className="flex justify-between items-center mb-5 pb-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className={`w-11 h-11 rounded-2xl ${containerTheme.glow} border flex items-center justify-center ${containerTheme.accent}`}>
                 <Compass size={22} className="animate-spin-slow" />
@@ -286,22 +299,22 @@ export const SafariStudio = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 no-print">
               <button
                 type="button"
                 onClick={handleExportPDF}
                 disabled={pdfStatus === 'generating'}
-                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
                   pdfStatus === 'success'
                     ? 'bg-emerald-500 text-slate-950 shadow-lg'
                     : 'bg-white/10 hover:bg-white/20 text-slate-300'
                 }`}
-                title="Download PDF"
+                title="Download Professional Itinerary PDF"
               >
                 {pdfStatus === 'generating' && <Loader2 size={15} className="animate-spin text-amber-400" />}
                 {pdfStatus === 'success' && <CheckCircle2 size={15} />}
                 {pdfStatus === 'idle' && <Download size={15} />}
-                <span className="hidden sm:inline">{pdfStatus === 'generating' ? 'Exporting...' : pdfStatus === 'success' ? 'Downloaded!' : 'Download PDF'}</span>
+                <span>{pdfStatus === 'generating' ? 'Exporting...' : pdfStatus === 'success' ? 'Downloaded!' : 'PDF'}</span>
               </button>
 
               <button
@@ -350,7 +363,7 @@ export const SafariStudio = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-slate-900 border border-white/10 rounded-2xl p-3 flex items-center gap-3 shadow-md">
               <div className="w-8 h-8 rounded-xl bg-amber-400/10 flex items-center justify-center text-amber-400">
                 <Layers size={16} />
@@ -372,8 +385,8 @@ export const SafariStudio = () => {
             </div>
           </div>
 
-          {/* Printable Container Region for PDF Generation */}
-          <div ref={printRef} className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar bg-slate-950">
+          {/* Day Cards List Container */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar bg-slate-950 mb-4">
             {days.map((day) => (
               <DayCard 
                 key={day.id} 
@@ -390,12 +403,13 @@ export const SafariStudio = () => {
             <button 
               type="button"
               onClick={addDay} 
-              className="w-full py-4 border-2 border-dashed border-white/15 rounded-2xl text-slate-300 font-bold text-xs tracking-wider uppercase hover:border-amber-400/50 hover:bg-amber-400/5 hover:text-amber-400 transition-all flex items-center justify-center gap-2 group cursor-pointer shadow-inner"
+              className="w-full py-4 border-2 border-dashed border-white/15 rounded-2xl text-slate-300 font-bold text-xs tracking-wider uppercase hover:border-amber-400/50 hover:bg-amber-400/5 hover:text-amber-400 transition-all flex items-center justify-center gap-2 group cursor-pointer shadow-inner no-print"
             >
               <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
               <span>Add New Day</span>
             </button>
           </div>
+
         </div>
       </aside>
 
@@ -412,7 +426,7 @@ export const SafariStudio = () => {
           <div className="flex p-5 border-b border-white/10 justify-between items-center bg-slate-900">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-amber-400" />
-              <span className="text-xs font-black tracking-widest text-white uppercase">Experience Catalog</span>
+              <span className="text-xs font-black tracking-widest text-white uppercase">Experience Catalog ({residencyTier})</span>
             </div>
             <button 
               type="button"
@@ -423,7 +437,7 @@ export const SafariStudio = () => {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <ItineraryBuilder />
+            <ItineraryBuilder residencyTier={residencyTier} />
           </div>
         </aside>
       )}
@@ -439,7 +453,7 @@ export const SafariStudio = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-white tracking-tight">Itinerary Cart Manifest</h3>
-                  <p className="text-xs text-slate-400">Review selected experiences, adjust guest counts, and view live quotes.</p>
+                  <p className="text-xs text-slate-400">Review selected experiences, adjust guest counts, and view live residency pricing quotes.</p>
                 </div>
               </div>
               <button 
@@ -452,93 +466,137 @@ export const SafariStudio = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-            <div className="flex items-center justify-between bg-slate-950 p-4 rounded-2xl border border-white/5">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5 text-xs text-slate-300 font-bold">
-                  <Users size={14} className="text-amber-400" />
-                  <span>Adults: {guests.adults}</span>
+            <div className="bg-slate-950 p-4 rounded-2xl border border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-amber-400" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Residency Tariff Tier</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-300 font-bold">
-                  <span>Children: {guests.children}</span>
+                <div className="px-3 py-1 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                  {residencyTier} (Profile Locked)
                 </div>
               </div>
-              <div className="text-right">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Tariff Tier</span>
-                <span className="text-xs font-black text-amber-300">{residencyTier}</span>
-              </div>
-          </div>
 
-          {allItineraryItems.length === 0 ? (
-            <div className="text-center py-12">
-              <ShoppingCart size={40} className="mx-auto text-slate-600 mb-3" />
-              <p className="text-sm font-bold text-slate-400">Your cart is currently empty.</p>
-              <p className="text-xs text-slate-500 mt-1">Add experiences from the catalog or awaken the AI Architect to populate your trip.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {allItineraryItems.map((slot, idx) => (
-                <div key={idx} className="bg-slate-950 border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4">
-                  <div className="overflow-hidden">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">Day {slot.dayNumber} - {slot.type}</span>
-                    </div>
-                    <h4 className="text-sm font-black text-white truncate">{slot.item.name}</h4>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{slot.item.location_name || 'Tanzania Safari Circuit'}</p>
-                  </div>
-
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="text-right">
-                      <span className="text-sm font-black text-amber-400">${slot.item.price ?? 150}</span>
-                      <span className="text-[10px] text-slate-500 block">per person</span>
-                    </div>
-                    <button
+              <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                <div className="flex items-center gap-2">
+                  <Users size={16} className="text-amber-400" />
+                  <span className="text-xs font-bold text-slate-300">Guests Count</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Adults</span>
+                    <button 
                       type="button"
-                      onClick={() => {
-                        const parentDay = days.find(d => d.day_number === slot.dayNumber);
-                        if (parentDay) handleRemoveItem(parentDay.id, slot.id);
-                      }}
-                      className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-colors cursor-pointer"
-                      title="Remove item"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                      onClick={() => setGuests(prev => ({ ...prev, adults: Math.max(1, prev.adults - 1) }))}
+                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                    >-</button>
+                    <span className="text-xs font-black text-white w-4 text-center">{guests.adults}</span>
+                    <button 
+                      type="button"
+                      onClick={() => setGuests(prev => ({ ...prev, adults: prev.adults + 1 }))}
+                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                    >+</button>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Kids</span>
+                    <button 
+                      type="button"
+                      onClick={() => setGuests(prev => ({ ...prev, children: Math.max(0, prev.children - 1) }))}
+                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                    >-</button>
+                    <span className="text-xs font-black text-white w-4 text-center">{guests.children}</span>
+                    <button 
+                      type="button"
+                      onClick={() => setGuests(prev => ({ ...prev, children: prev.children + 1 }))}
+                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                    >+</button>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
-          )}
-        </div>
 
-        <div className="p-6 border-t border-white/10 bg-slate-950 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Estimated Total Quote</span>
-            <span className="text-2xl font-black text-white flex items-center gap-0.5">
-              <DollarSign size={20} className="text-amber-400" />
-              {estimatedTotal.toLocaleString()}
-            </span>
+            {allItineraryItems.length === 0 ? (
+              <div className="text-center py-12">
+                <ShoppingCart size={40} className="mx-auto text-slate-600 mb-3" />
+                <p className="text-sm font-bold text-slate-400">Your cart is currently empty.</p>
+                <p className="text-xs text-slate-500 mt-1">Add experiences from the catalog or awaken the AI Architect to populate your trip.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {allItineraryItems.map((slot, idx) => {
+                  const item = slot.item;
+                  let activeRate = item.price ?? item.base_price ?? 150;
+                  if (residencyTier === 'RESIDENT' && item.resident_price) {
+                    activeRate = item.resident_price;
+                  } else if (residencyTier === 'CITIZEN' && item.ea_price) {
+                    activeRate = item.ea_price;
+                  }
+
+                  return (
+                    <div key={idx} className="bg-slate-950 border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4">
+                      <div className="overflow-hidden">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">Day {slot.dayNumber} - {slot.type}</span>
+                        </div>
+                        <h4 className="text-sm font-black text-white truncate">{item.name}</h4>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">{item.location_name || 'Tanzania Safari Circuit'}</p>
+                      </div>
+
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-right">
+                          <span className="text-sm font-black text-amber-400">${activeRate}</span>
+                          <span className="text-[10px] text-slate-500 block">per person ({residencyTier.toLowerCase()})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const parentDay = days.find(d => d.day_number === slot.dayNumber);
+                            if (parentDay) handleRemoveItem(parentDay.id, slot.id);
+                          }}
+                          className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Remove item"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setIsCartModalOpen(false);
-              handleSave();
-            }}
-          className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
-        >
-          Secure & Save Itinerary
-        </button>
-        </div>
-    </div>
-  </div>
-)}
 
-{isAuthenticated && (
-  <AIAssistantDrawer 
-    isOpen={isAiOpen} 
-    onClose={() => setIsAiOpen(false)} 
-    onApplyItinerary={handleApplyItinerary} 
-  />
-)}
+          <div className="p-6 border-t border-white/10 bg-slate-950 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Estimated Total Quote</span>
+              <span className="text-2xl font-black text-white flex items-center gap-0.5">
+                <DollarSign size={20} className="text-amber-400" />
+                {estimatedTotal.toLocaleString()}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsCartModalOpen(false);
+                handleSave();
+              }}
+            className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
+          >
+            Secure & Save Itinerary
+          </button>
+          </div>
+      </div>
+    </div>
+  )}
+
+  {isAuthenticated && (
+    <AIAssistantDrawer 
+      isOpen={isAiOpen} 
+      onClose={() => setIsAiOpen(false)} 
+      onApplyItinerary={handleApplyItinerary} 
+    />
+  )}
     </div>
   );
 };

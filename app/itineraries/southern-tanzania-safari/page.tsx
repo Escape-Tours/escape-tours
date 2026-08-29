@@ -1,8 +1,8 @@
 "use client"
 
 
-import {  } from "@/components/footer"
-import { WhatsAppFloat } from "@/components/whatsapp-float"
+import  Footer   from "@/components/footer"
+import  WhatsAppFloat  from "@/components/whatsapp-float"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -351,7 +351,7 @@ export default function SouthernTanzaniaSafariPage() {
           </div>
         </section>
       </main>
-      < />
+      < Footer/>
       <WhatsAppFloat />
     </div>
   )

@@ -57,7 +57,7 @@ export default function MaranguRoutePage() {
       </main>
 
       <BookingModal
-      bookingType="trek"
+        bookingType="trek"
         isOpen={isBookingOpen}
         onCloseAction={() => setIsBookingOpen(false)}
         hotelName="Marangu Route 6-Day Trek"

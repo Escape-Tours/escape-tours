@@ -1,8 +1,7 @@
 "use client"
 
-
-import {  } from "@/components/footer"
-import { WhatsAppFloat } from "@/components/whatsapp-float"
+import  Footer  from "@/components/footer"
+import  WhatsAppFloat  from "@/components/whatsapp-float"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -18,7 +17,6 @@ export default function ZanzibarBeachEscapePage() {
 
   return (
     <div className="min-h-screen">
-     
       <main>
         {/* Hero Section */}
         <section className="relative h-[60vh] min-h-[500px] w-full">
@@ -434,7 +432,7 @@ export default function ZanzibarBeachEscapePage() {
           </div>
         </section>
       </main>
-      < />
+      <Footer />
       <WhatsAppFloat />
     </div>
   )

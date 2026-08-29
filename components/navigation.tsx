@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ChevronDown, Wand2, User, Store, Gift, LogOut, ShieldCheck, ShoppingBag, Trash2, ArrowRight } from "lucide-react";
+import { Menu, X, ChevronDown, Wand2, User, Store, Gift, LogOut, ShieldCheck, ShoppingBag, Trash2, ArrowRight, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createBrowserClient } from "@supabase/ssr";
 import { useItineraryStore } from "@/store/useItineraryStore";
@@ -192,6 +192,12 @@ export function Navigation() {
 
               <Link href="/lifestyle-hub" className="p-2.5 rounded-xl bg-amber-100 text-amber-900 border border-amber-200 hover:bg-amber-200 transition-all" title="Lifestyle Hub">
                 <Gift size={15} />
+              </Link>
+
+              {/* Driver Portal Link */}
+              <Link href="/driver-portal" className="p-2.5 rounded-xl bg-slate-900 text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-all flex items-center gap-2 px-3.5" title="Driver Portal">
+                <Truck size={15} />
+                <span className="text-xs font-bold">Driver</span>
               </Link>
 
               {/* Enquire Button Restored to the Far Right */}

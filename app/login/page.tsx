@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Lock, Mail, KeyRound, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { Mail, KeyRound, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -101,18 +101,25 @@ export default function LoginPage() {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-xl transition text-xs uppercase tracking-wider shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 mt-2"
+            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-xl transition text-xs uppercase tracking-wider shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 mt-2 cursor-pointer"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <>Sign In to User Hub <ArrowRight size={16} /></>}
           </button>
         </form>
 
-        <div className="pt-4 border-t border-slate-800 text-center relative z-10">
+        <div className="pt-4 border-t border-slate-800 flex items-center justify-between relative z-10 text-xs">
           <button 
             onClick={() => router.push('/')}
-            className="text-xs text-slate-400 hover:text-white transition font-medium"
+            className="text-slate-400 hover:text-white transition font-medium"
           >
-            ← Return to Escape Tours Home
+            ← Return Home
+          </button>
+          
+          <button 
+            onClick={() => router.push('/register')}
+            className="text-amber-400 hover:text-amber-300 transition font-bold"
+          >
+            Create Account →
           </button>
         </div>
 

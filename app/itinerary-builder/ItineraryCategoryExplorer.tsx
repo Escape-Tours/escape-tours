@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useUser } from '@/components/providers/UserContext';
 import { createClient } from '@/lib/supabase/client';
-import { Search, Bed, Car, Mountain, MapPin, AlertCircle, Anchor, Compass, Loader2, Users, Minus, Plus, Sparkles } from 'lucide-react';
+import { Search, Bed, Car, Mountain, MapPin, AlertCircle, Anchor, Compass, Loader2, Users, Minus, Plus, Sparkles, ShieldCheck } from 'lucide-react';
 import { getStandardizedPrice, ResidencyTier } from "@/lib/utils/price-translator";
 import { BuilderItem } from '@/lib/types/itinerary-types';
 import { mapDbItemsToBuilderItems } from '@/lib/utils/item-mapper';
@@ -17,12 +17,6 @@ const CATEGORY_CONFIG = [
   { label: 'Safaris', dbType: 'parks', icon: Compass, bg: 'bg-amber-50/80', activeBg: 'bg-amber-600 text-white shadow-lg shadow-amber-500/25', border: 'border-amber-100/60', text: 'text-amber-600' },
   { label: 'Cruises', dbType: 'cruises', icon: Anchor, bg: 'bg-blue-50/80', activeBg: 'bg-blue-600 text-white shadow-lg shadow-blue-500/25', border: 'border-blue-100/60', text: 'text-blue-600' },
   { label: 'Treks', dbType: 'treks', icon: Mountain, bg: 'bg-rose-50/80', activeBg: 'bg-rose-600 text-white shadow-lg shadow-rose-500/25', border: 'border-rose-100/60', text: 'text-rose-600' },
-] as const;
-
-const TIER_OPTIONS = [
-  { id: 'INTERNATIONAL', label: 'Intl' },
-  { id: 'RESIDENT', label: 'Res' },
-  { id: 'CITIZEN', label: 'Cit' }
 ] as const;
 
 const InventoryItem = memo(({ item, onDragStart, onDragEnd, draggedId, tier }: { 
@@ -74,16 +68,117 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, draggedId, tier }: {
 
 InventoryItem.displayName = 'InventoryItem';
 
-export const ItineraryBuilder = () => {
-  const { tier, setTier } = useUser();
+interface ItineraryBuilderProps {
+  tier?: string;
+  residencyTier?: string;
+}
+
+export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyTier }: ItineraryBuilderProps) => {
+  const userContext = useUser() as any;
+  const initialTier = propResidencyTier || propTier || 'INTERNATIONAL';
+  const [resolvedTier, setResolvedTier] = useState<string>(initialTier);
+  const [loadingTier, setLoadingTier] = useState(!propResidencyTier && !propTier);
+
+  useEffect(() => {
+    const activeProp = propResidencyTier || propTier;
+    if (activeProp) {
+      setResolvedTier(activeProp);
+      setLoadingTier(false);
+    }
+  }, [propResidencyTier, propTier]);
+
+  const syncUserHubTier = useCallback(async () => {
+    if (propResidencyTier || propTier) return;
+    try {
+      const localStoredTier = localStorage.getItem('escape_user_tier') || localStorage.getItem('residency_tier') || sessionStorage.getItem('residency_tier');
+      if (localStoredTier) {
+        setResolvedTier(String(localStoredTier).toUpperCase());
+        setLoadingTier(false);
+        return;
+      }
+
+      const ctxTier = userContext?.tier || userContext?.residencyTier || userContext?.profile?.tier || userContext?.profile?.residency_tier;
+      if (ctxTier) {
+        setResolvedTier(String(ctxTier).toUpperCase());
+        setLoadingTier(false);
+        return;
+      }
+
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        const metaTier = session.user.user_metadata?.residency_tier || session.user.user_metadata?.tier;
+        if (metaTier) {
+          setResolvedTier(String(metaTier).toUpperCase());
+          setLoadingTier(false);
+          return;
+        }
+
+        const { data: profile } = await (supabase.from('profiles' as any) as any)
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile) {
+          const dbFoundTier = profile.residency_tier || profile.tier || profile.category || profile.account_type;
+          if (dbFoundTier) {
+            setResolvedTier(String(dbFoundTier).toUpperCase());
+            setLoadingTier(false);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing profile tier from User Hub:', err);
+    } finally {
+      setLoadingTier(false);
+    }
+  }, [propResidencyTier, propTier, userContext]);
+
+  useEffect(() => {
+    if (!propResidencyTier && !propTier) {
+      syncUserHubTier();
+    }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!propResidencyTier && !propTier && (e.key === 'escape_user_tier' || e.key === 'residency_tier')) {
+        if (e.newValue) setResolvedTier(e.newValue.toUpperCase());
+      }
+    };
+
+    const handleCustomTierUpdate = (e: Event) => {
+      if (!propResidencyTier && !propTier) {
+        const customEvent = e as CustomEvent;
+        if (customEvent.detail?.tier) {
+          setResolvedTier(String(customEvent.detail.tier).toUpperCase());
+        } else {
+          syncUserHubTier();
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('user-tier-updated', handleCustomTierUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('user-tier-updated', handleCustomTierUpdate);
+    };
+  }, [propResidencyTier, propTier, syncUserHubTier]);
+
+  const rawNormalized = resolvedTier.toLowerCase();
+  const normalizedTier: ResidencyTier = rawNormalized.includes('citizen') 
+    ? 'CITIZEN' 
+    : rawNormalized.includes('resident') 
+    ? 'RESIDENT' 
+    : 'INTERNATIONAL';
   
-  // Directly subscribe to store fields matching useItineraryStore definition
   const adults = useItineraryStore((state: any) => state.adults ?? 1);
   const children = useItineraryStore((state: any) => state.children ?? 0);
   const setGuests = useItineraryStore((state: any) => state.setGuests ?? (() => {}));
   const storeItems = useItineraryStore((state: any) => state.items ?? []);
 
-  // Compute base subtotal and final total including 18% VAT and 20% Agency Fee
   const { baseTotal, totalPrice } = useMemo(() => {
     if (!storeItems || storeItems.length === 0) return { baseTotal: 0, totalPrice: 0 };
     
@@ -91,7 +186,7 @@ export const ItineraryBuilder = () => {
     let total = 0;
 
     storeItems.forEach((item: any) => {
-      const localizedPrice = Number(getStandardizedPrice(item.price, tier as ResidencyTier)) || 0;
+      const localizedPrice = Number(getStandardizedPrice(item.price, normalizedTier)) || 0;
       const quantity = Number(item.quantity ?? item.slots ?? 1);
       const subtotalBase = localizedPrice * quantity;
       
@@ -103,7 +198,7 @@ export const ItineraryBuilder = () => {
     });
 
     return { baseTotal: base, totalPrice: total };
-  }, [storeItems, tier]);
+  }, [storeItems, normalizedTier]);
   
   const [activeCategory, setActiveCategory] = useState<string>('Lodges');
   const [items, setItems] = useState<BuilderItem[]>([]);
@@ -167,20 +262,11 @@ export const ItineraryBuilder = () => {
             <h2 className="font-black text-slate-100 text-xs uppercase tracking-[0.2em]">Inventory Library</h2>
           </div>
           
-          <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800/80 shadow-inner">
-            {TIER_OPTIONS.map((t) => (
-              <button 
-                key={t.id} 
-                onClick={() => setTier(t.id as ResidencyTier)} 
-                className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all duration-300 ${
-                  tier === t.id 
-                    ? 'bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.4)]' 
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 rounded-xl border border-slate-800/80 shadow-inner">
+            <ShieldCheck size={13} className="text-amber-400" />
+            <span className="text-[9px] font-black uppercase tracking-wider text-amber-300">
+              {loadingTier ? 'SYNCING...' : `${normalizedTier} TIER LOCKED`}
+            </span>
           </div>
         </div>
         
@@ -193,6 +279,7 @@ export const ItineraryBuilder = () => {
              </div>
              <div className="flex items-center gap-2.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
                <button 
+                type="button"
                 onClick={() => setGuests(Math.max(1, adults - 1), children)}
                 className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
                >
@@ -200,6 +287,7 @@ export const ItineraryBuilder = () => {
                </button>
                <span className="text-[11px] font-black text-amber-300 min-w-[12px] text-center">{adults}</span>
                <button 
+                type="button"
                 onClick={() => setGuests(adults + 1, children)}
                 className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
                >
@@ -215,6 +303,7 @@ export const ItineraryBuilder = () => {
              </div>
              <div className="flex items-center gap-2.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
                <button 
+                type="button"
                 onClick={() => setGuests(adults, Math.max(0, children - 1))}
                 className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
                >
@@ -222,6 +311,7 @@ export const ItineraryBuilder = () => {
                </button>
                <span className="text-[11px] font-black text-amber-300 min-w-[12px] text-center">{children}</span>
                <button 
+                type="button"
                 onClick={() => setGuests(adults, children + 1)}
                 className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
                >
@@ -247,6 +337,7 @@ export const ItineraryBuilder = () => {
             const isActive = activeCategory === cat.label;
             return (
               <button 
+                type="button"
                 key={cat.label} 
                 onClick={() => setActiveCategory(cat.label)} 
                 className={`flex flex-col items-center gap-1.5 p-2.5 rounded-2xl transition-all duration-300 border cursor-pointer ${
@@ -275,7 +366,7 @@ export const ItineraryBuilder = () => {
             <InventoryItem 
               key={item.id} 
               item={item} 
-              tier={tier as ResidencyTier} 
+              tier={normalizedTier} 
               draggedId={draggedItemId} 
               onDragStart={handleDragStart} 
               onDragEnd={() => setDraggedItemId(null)} 
@@ -296,13 +387,11 @@ export const ItineraryBuilder = () => {
       <div className="p-5 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur-xl shadow-2xl relative space-y-3">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-[1px] bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
         
-        {/* Base Subtotal */}
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-slate-400 uppercase tracking-wider">Subtotal (Before Tax)</span>
           <span className="font-bold text-slate-200">${baseTotal.toLocaleString()}</span>
         </div>
 
-        {/* Final Total Quote */}
         <div className="flex justify-between items-center pt-2 border-t border-slate-800">
           <div>
             <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400 block">Total Quote</span>

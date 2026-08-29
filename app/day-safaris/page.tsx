@@ -1,6 +1,4 @@
-
-
-import { WhatsAppFloat } from "@/components/whatsapp-float"
+import WhatsAppFloat from "@/components/whatsapp-float"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
@@ -106,7 +104,6 @@ const dayTrips = [
 export default function DaySafarisPage() {
   return (
     <div className="min-h-screen">
-     
       <main>
         {/* Hero Section */}
         <section className="relative h-[50vh] min-h-[400px] w-full flex items-center justify-center bg-gradient-to-r from-brand-dark to-brand-green">

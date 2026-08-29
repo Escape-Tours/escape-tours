@@ -4,12 +4,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Trash2, ArrowRight, X, Sparkles } from 'lucide-react';
+import { useItineraryStore } from '@/store/useItineraryStore';
 
 interface CartItem {
   id: string | number;
+  originalId?: string;
   title?: string;
   name?: string;
   price?: number;
+  basePrice?: any;
   category?: string;
   image?: string;
   type?: string;
@@ -23,52 +26,43 @@ interface ItineraryCartProps {
 
 export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
   const router = useRouter();
+  const { cartItems: storeCartItems, removeCartItem, clearCart, buildFromCart, tier } = useItineraryStore();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // Load cart items from localStorage on mount and listen for storage or custom events
+  // Load cart items from Zustand store and fall back/sync with localStorage
   useEffect(() => {
-    const loadCart = () => {
-      try {
-        // Check standard keys used across your platform pages
-        const stored = localStorage.getItem('escape_itinerary_cart') || 
-                       localStorage.getItem('itinerary_cart_items') || 
-                       localStorage.getItem('cart');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            setCartItems(parsed);
-          }
+    if (storeCartItems) {
+      setCartItems(storeCartItems as CartItem[]);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem('escape_itinerary_cart') || 
+                     localStorage.getItem('itinerary_cart_items') || 
+                     localStorage.getItem('cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setCartItems(parsed);
         }
-      } catch (err) {
-        console.error('Error loading itinerary cart:', err);
       }
-    };
-
-    loadCart();
-
-    // Listen to window custom events dispatched from "Add to Itinerary" buttons across pages
-    window.addEventListener('storage', loadCart);
-    window.addEventListener('cartUpdated', loadCart as EventListener);
-
-    return () => {
-      window.removeEventListener('storage', loadCart);
-      window.removeEventListener('cartUpdated', loadCart as EventListener);
-    };
-  }, [isOpen]);
+    } catch (err) {
+      console.error('Error loading itinerary cart:', err);
+    }
+  }, [storeCartItems, isOpen, tier]);
 
   const removeItem = (id: string | number) => {
+    removeCartItem(String(id));
     const updated = cartItems.filter(item => (item.id || item.title) !== id);
     setCartItems(updated);
     
-    // Update all potential storage keys to keep them in sync
     localStorage.setItem('escape_itinerary_cart', JSON.stringify(updated));
     localStorage.setItem('itinerary_cart_items', JSON.stringify(updated));
-    
-    // Dispatch event so other components know cart changed
     window.dispatchEvent(new Event('cartUpdated'));
   };
 
   const clearAll = () => {
+    clearCart();
     setCartItems([]);
     localStorage.removeItem('escape_itinerary_cart');
     localStorage.removeItem('itinerary_cart_items');
@@ -76,8 +70,12 @@ export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
   };
 
   const handleBuildFromCart = () => {
-    // Pass cart items or save them for the builder to consume
+    // 1. Transfer items using Zustand's built-in buildFromCart action
+    buildFromCart();
+
+    // 2. Persist data for legacy check or direct routing compatibility
     localStorage.setItem('builder_imported_items', JSON.stringify(cartItems));
+    
     onClose();
     router.push('/itinerary-builder?imported=true');
   };
@@ -99,7 +97,7 @@ export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
             <div>
               <h2 className="text-base font-bold text-white tracking-tight">Itinerary Cart</h2>
               <p className="text-xs text-slate-400 font-mono">
-                {cartItems.length} item(s) picked for your trip
+                {cartItems.length} item(s) picked for your trip ({tier})
               </p>
             </div>
           </div>
@@ -121,7 +119,7 @@ export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-white">Your Cart is Empty</h3>
                 <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                  Browse our safaris, hotels, or packages across the website and click <span className="text-amber-400 font-bold">"Add to Itinerary"</span> to build your custom trip.
+                  Browse our safaris, hotels, or packages across the website and click <span className="text-amber-400 font-bold">"Add to Itinerary Cart"</span> to build your custom trip.
                 </p>
               </div>
             </div>

@@ -1,8 +1,7 @@
 "use client"
 
-
-import {  } from "@/components/footer"
-import { WhatsAppFloat } from "@/components/whatsapp-float"
+import Footer from "@/components/footer"
+import WhatsAppFloat from "@/components/whatsapp-float"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -175,7 +174,6 @@ export function ItinerariesClient() {
 
   return (
     <div className="min-h-screen">
-     
       <main>
         {/* Hero Section */}
         <section className="relative h-[50vh] min-h-[400px] w-full flex items-center justify-center bg-gradient-to-r from-brand-dark to-brand-green">
@@ -268,7 +266,7 @@ export function ItinerariesClient() {
           </div>
         </section>
       </main>
-      < />
+      <Footer />
       <WhatsAppFloat />
     </div>
   )

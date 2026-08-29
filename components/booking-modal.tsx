@@ -22,7 +22,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   
-  const roomCategories = useMemo(() => Object.keys(hotel.room_prices || {}), [hotel.room_prices]);
+  const roomCategories = useMemo(() => Object.keys(hotel?.room_prices || {}), [hotel?.room_prices]);
   
   const [bookingData, setBookingData] = useState({
     firstName: "", lastName: "", email: "", phone: "", 
@@ -40,7 +40,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
   }, [initialCategory]);
 
   const details = useMemo(() => {
-    if (!bookingData.checkIn || !bookingData.checkOut || !bookingData.category) return null;
+    if (!bookingData.checkIn || !bookingData.checkOut || !bookingData.category || !hotel?.room_prices) return null;
     
     const start = new Date(bookingData.checkIn);
     const end = new Date(bookingData.checkOut);
@@ -53,7 +53,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
     if (typeof rawPriceData === 'number') {
       nightRate = rawPriceData;
     } else if (typeof rawPriceData === 'object' && rawPriceData !== null) {
-      const tierKey = activeTier.toLowerCase();
+      const tierKey = activeTier?.toLowerCase() || "";
       const target = rawPriceData[activeTier] || rawPriceData[tierKey] || rawPriceData.high || rawPriceData.low || Object.values(rawPriceData)[0];
       
       if (typeof target === 'number') {
@@ -81,7 +81,6 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
     if (!details) return;
     setFormError("");
 
-    // Strict validation check matching server requirements
     if (!bookingData.firstName.trim() || !bookingData.lastName.trim() || !bookingData.email.trim() || !bookingData.phone) {
       setFormError("Please fill in all required personal details (First Name, Last Name, Email, Phone).");
       return;
@@ -90,7 +89,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
     setLoading(true);
     
     const payload = {
-      hotel_id: hotel.id,
+      hotel_id: hotel?.id,
       first_name: bookingData.firstName.trim(),
       last_name: bookingData.lastName.trim(),
       email: bookingData.email.trim(),
@@ -113,7 +112,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
     console.log("Submitting validated booking payload:", payload);
 
     try {
-      const response = await createBooking(payload);
+      const response: any = await createBooking(payload);
       console.log("Create booking raw server response:", response);
 
       if (response?.error) {
@@ -121,11 +120,11 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
       }
       
       const newBooking = response?.data || response;
-      if (!newBooking?.id) {
+      if (!newBooking || typeof newBooking !== 'object' || !('id' in newBooking)) {
         throw new Error("Booking record processed on server but no valid booking ID returned.");
       }
       
-      window.location.href = `/api/checkout?bookingId=${newBooking.id}&amount=${details.totalAmount}`;
+      window.location.href = `/api/checkout?bookingId=${(newBooking as any).id}&amount=${details.totalAmount}`;
     } catch (err: any) {
       console.error("Detailed Booking Execution Error:", err);
       setFormError(err?.message || "Invalid booking data provided.");
@@ -143,7 +142,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
             <Sparkles size={14} /> Escape + Vision Booking
           </div>
           
-          <DialogTitle className="text-2xl font-serif text-slate-900">Finalizing {hotel.name}</DialogTitle>
+          <DialogTitle className="text-2xl font-serif text-slate-900">Finalizing {hotel?.name}</DialogTitle>
           
           {/* PERSONAL DETAILS LOCKED AT THE TOP */}
           <div className="space-y-3 bg-amber-50/40 p-4 rounded-2xl border border-amber-100">
@@ -165,7 +164,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 flex items-center gap-3 bg-white px-4 rounded-xl border border-slate-200">
                 <Globe size={16} className="text-slate-400"/>
-                <select value={activeTier} onChange={(e) => setTier(e.target.value as any)} className="w-full bg-transparent py-3 outline-none text-sm font-medium">
+                <select value={activeTier} onChange={(e) => setTier?.(e.target.value as any)} className="w-full bg-transparent py-3 outline-none text-sm font-medium">
                   <option value="INTERNATIONAL">International</option>
                   <option value="RESIDENT">Resident</option>
                   <option value="CITIZEN">Citizen</option>

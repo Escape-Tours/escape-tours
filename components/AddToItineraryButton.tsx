@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { createBrowserClient } from '@supabase/ssr';
 
 export const AddToItineraryButton = ({ item }: { item: any }) => {
-  const { addItem } = useItineraryStore();
+  const { addCartItem } = useItineraryStore();
   
   // Initialize Supabase client for the browser using standard @supabase/ssr
   const supabase = createBrowserClient(
@@ -27,9 +27,16 @@ export const AddToItineraryButton = ({ item }: { item: any }) => {
         return;
       }
 
-      // 2. Update local Zustand state once verified
-      addItem(item);
-      console.log("Added to itinerary store:", item.title || item.name);
+      // 2. Update local Zustand cart state using addCartItem (avoids missing dayId/timeSlot error)
+      addCartItem({
+        originalId: item.id || item.slug || item.title || item.name,
+        name: item.title || item.name,
+        type: item.type || 'activities',
+        basePrice: item.basePrice || item.base_price || item.price || 0,
+        price: item.price || 0,
+        selectedRoomType: item.selectedRoomType,
+      });
+      console.log("Added to itinerary cart:", item.title || item.name);
 
       // 3. Find or create an active draft itinerary for this user in Supabase
       let { data: activeItinerary } = await supabase
@@ -73,7 +80,7 @@ export const AddToItineraryButton = ({ item }: { item: any }) => {
       if (itemError) {
         console.error("Supabase sync error:", itemError.message);
       } else {
-        alert(`Success! "${itemName}" has been added to your itinerary.`);
+        alert(`Success! "${itemName}" has been added to your itinerary cart.`);
       }
 
     } catch (err: any) {
@@ -87,7 +94,7 @@ export const AddToItineraryButton = ({ item }: { item: any }) => {
       onClick={handleAdd}
       className="w-full bg-brand-orange hover:bg-brand-orange/90 text-white font-bold"
     >
-      Add to Itinerary
+      Add to Itinerary Cart
     </Button>
   );
 };

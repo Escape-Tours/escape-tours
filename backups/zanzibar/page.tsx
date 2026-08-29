@@ -5,82 +5,263 @@ import WhatsAppFloat from "@/components/whatsapp-float";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
-import { Clock, Check } from "lucide-react";
+import { Clock, Check, ShieldCheck, CreditCard } from "lucide-react";
 import { useItineraryStore } from "@/store/useItineraryStore";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createBrowserClient } from "@supabase/ssr";
+import { useState } from "react";
 
 function AddToItineraryButton({ item }: { item: any }) {
-  const { addItem } = useItineraryStore();
-  const supabase = createClientComponentClient();
+  const { addCartItem } = useItineraryStore();
 
-  const handleAdd = async (e: React.MouseEvent) => {
+  const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        alert("Please log in to your User Hub first to start building your itinerary.");
-        window.location.href = '/user-hub';
-        return;
-      }
-
-      addItem(item);
-
-      let { data: activeItinerary } = await supabase
-        .from('itineraries')
-        .select('id')
-        .eq('user_id', session.user.id)
-        .eq('status', 'draft')
-        .single();
-
-      if (!activeItinerary) {
-        const { data: newItinerary, error: createError } = await supabase
-          .from('itineraries')
-          .insert([
-            {
-              user_id: session.user.id,
-              title: 'My Custom Expedition',
-              status: 'draft',
-              circuit: 'Zanzibar Circuit'
-            }
-          ])
-          .select('id')
-          .single();
-
-        if (createError) throw createError;
-        activeItinerary = newItinerary;
-      }
-
-      const { error: itemError } = await supabase
-        .from('itinerary_items')
-        .insert([
-          {
-            itinerary_id: activeItinerary.id,
-            item_id: item.title.toLowerCase().replace(/\s+/g, '-'),
-            item_type: 'tour',
-            item_name: item.title
-          }
-        ]);
-
-      if (itemError) {
-        console.error("Supabase sync error:", itemError.message);
-      } else {
-        alert(`Success! "${item.title}" has been added to your User Hub itinerary.`);
-      }
-
-    } catch (err: any) {
-      console.error("Error linking item to User Hub:", err.message);
-    }
+    addCartItem({
+      originalId: item.id || item.slug || item.title || item.name,
+      name: item.title || item.name,
+      type: "activities",
+      basePrice: item.basePrice || item.base_price || item.price || 0,
+      price: Number(item.price) || 0,
+    });
+    alert(`Success! "${item.title}" has been added to your Itinerary Cart.`);
   };
 
   return (
     <Button 
       onClick={handleAdd}
-      className="w-full bg-brand-orange hover:bg-brand-orange/90 text-white font-bold"
+      variant="outline"
+      className="w-full border-brand-orange text-brand-orange hover:bg-brand-orange hover:text-white font-bold"
     >
-      Add to Itinerary
+      Add to Itinerary Cart
     </Button>
+  );
+}
+
+function BookNowModal({ tour, isOpen, onClose }: { tour: any; isOpen: boolean; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [travelDate, setTravelDate] = useState("");
+  const [participants, setParticipants] = useState(1);
+  const [residencyTier, setResidencyTier] = useState<"citizen" | "resident" | "international">("international");
+
+  if (!isOpen) return null;
+
+  const baseSubtotal = Number(tour.price) * participants;
+  const agencyFee = baseSubtotal * 0.20;
+  const subtotalWithFee = baseSubtotal + agencyFee;
+  const vat = subtotalWithFee * 0.18;
+  const grandTotal = subtotalWithFee + vat;
+
+  const handlePesaPalCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/pesapal/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tour_title: tour.title,
+          amount: grandTotal,
+          currency: 'USD',
+          email,
+          phone,
+          full_name: fullName,
+          travel_date: travelDate,
+          participants,
+          residency_tier: residencyTier
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.redirect_url) {
+        window.location.href = data.redirect_url;
+      } else {
+        alert(data.error || "Failed to initialize PesaPal payment gateway.");
+      }
+    } catch (err: any) {
+      console.error("PesaPal payment error:", err);
+      alert("An error occurred while connecting to PesaPal.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-xl w-full p-6 md:p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto">
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 font-bold text-xl"
+        >
+          &times;
+        </button>
+
+        <h3 className="text-2xl font-black text-brand-dark mb-2">Book: {tour.title}</h3>
+        <p className="text-sm text-gray-600 mb-6">Secure your excursion instantly via PesaPal payment gateway.</p>
+
+        <form onSubmit={handlePesaPalCheckout} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Full Name</label>
+            <input 
+              type="text" 
+              required 
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="John Doe"
+              className="w-full border rounded-lg p-2.5 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Email Address</label>
+              <input 
+                type="email" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="john@example.com"
+                className="w-full border rounded-lg p-2.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Phone Number</label>
+              <input 
+                type="tel" 
+                required 
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+255..."
+                className="w-full border rounded-lg p-2.5 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Travel Date</label>
+              <input 
+                type="date" 
+                required 
+                value={travelDate}
+                onChange={(e) => setTravelDate(e.target.value)}
+                className="w-full border rounded-lg p-2.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Participants</label>
+              <input 
+                type="number" 
+                min={1} 
+                required 
+                value={participants}
+                onChange={(e) => setParticipants(parseInt(e.target.value) || 1)}
+                className="w-full border rounded-lg p-2.5 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Residency Status</label>
+            <select 
+              value={residencyTier}
+              onChange={(e: any) => setResidencyTier(e.target.value)}
+              className="w-full border rounded-lg p-2.5 text-sm bg-white"
+            >
+              <option value="citizen">Citizen (Tanzanian)</option>
+              <option value="resident">Resident</option>
+              <option value="international">International</option>
+            </select>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-xl space-y-2 border text-sm">
+            <div className="flex justify-between text-gray-600">
+              <span>Base Price ({participants}x):</span>
+              <span>${baseSubtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>Agency Fee (20%):</span>
+              <span>${agencyFee.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>VAT (18%):</span>
+              <span>${vat.toFixed(2)}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between font-black text-brand-dark text-base">
+              <span>Total Due:</span>
+              <span className="text-brand-orange">${grandTotal.toFixed(2)} USD</span>
+            </div>
+          </div>
+
+          <Button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-brand-orange hover:bg-brand-orange/90 text-white font-bold py-3 text-base flex items-center justify-center gap-2"
+          >
+            <CreditCard size={18} />
+            {loading ? "Initializing PesaPal..." : `Pay with PesaPal ($${grandTotal.toFixed(2)})`}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TourCard({ tour }: { tour: any }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  return (
+    <div className="bg-white rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+      <div>
+        {/* Image Container */}
+        <div className="relative h-64 bg-gray-200 overflow-hidden">
+          <Image src={tour.image || "/placeholder.svg"} alt={tour.title} fill className="object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          {tour.price && (
+            <div className="absolute top-4 right-4 bg-brand-orange text-white px-4 py-2 rounded-full font-bold">
+              ${tour.price}
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock size={16} className="text-brand-orange" />
+            <span className="text-sm font-semibold text-brand-orange">{tour.duration}</span>
+          </div>
+          <h3 className="text-xl font-bold text-brand-dark mb-3">{tour.title}</h3>
+          <p className="text-gray-600 text-sm leading-relaxed mb-4">{tour.description}</p>
+
+          {/* Highlights */}
+          <div className="space-y-1 mb-4">
+            {tour.highlights.map((highlight: string, idx: number) => (
+              <div key={idx} className="flex items-start gap-2">
+                <Check size={16} className="text-brand-green mt-0.5 flex-shrink-0" />
+                <span className="text-xs text-gray-600">{highlight}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="p-6 pt-0 space-y-3">
+        <Button 
+          onClick={() => setIsModalOpen(true)}
+          className="w-full bg-brand-orange hover:bg-brand-orange/90 text-white font-bold flex items-center justify-center gap-2"
+        >
+          <CreditCard size={16} />
+          Pay with PesaPal
+        </Button>
+        <AddToItineraryButton item={tour} />
+      </div>
+
+      <BookNowModal tour={tour} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+    </div>
   );
 }
 
@@ -228,54 +409,13 @@ export default function ZanzibarPage() {
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-black text-brand-dark mb-4">Zanzibar Experiences</h2>
               <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                Discover the magic of Zanzibar with our curated tours and experiences
+                Discover the magic of Zanzibar with our curated tours and experiences. Book and pay instantly via PesaPal, or add items to your itinerary cart.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {tours.map((tour, index) => (
-                <div
-                  key={index}
-                  className="bg-white rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between"
-                >
-                  <div>
-                    {/* Image Container */}
-                    <div className="relative h-64 bg-gray-200 overflow-hidden">
-                      <Image src={tour.image || "/placeholder.svg"} alt={tour.title} fill className="object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      {tour.price && (
-                        <div className="absolute top-4 right-4 bg-brand-orange text-white px-4 py-2 rounded-full font-bold">
-                          ${tour.price}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Clock size={16} className="text-brand-orange" />
-                        <span className="text-sm font-semibold text-brand-orange">{tour.duration}</span>
-                      </div>
-                      <h3 className="text-xl font-bold text-brand-dark mb-3">{tour.title}</h3>
-                      <p className="text-gray-600 text-sm leading-relaxed mb-4">{tour.description}</p>
-
-                      {/* Highlights */}
-                      <div className="space-y-1 mb-4">
-                        {tour.highlights.map((highlight, idx) => (
-                          <div key={idx} className="flex items-start gap-2">
-                            <Check size={16} className="text-brand-green mt-0.5 flex-shrink-0" />
-                            <span className="text-xs text-gray-600">{highlight}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Add to Itinerary Button */}
-                  <div className="p-6 pt-0">
-                    <AddToItineraryButton item={tour} />
-                  </div>
-                </div>
+                <TourCard key={index} tour={tour} />
               ))}
             </div>
           </div>

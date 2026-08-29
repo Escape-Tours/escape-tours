@@ -10,8 +10,8 @@ const buttonVariants = cva(
       variant: {
         default: "bg-brand-orange text-white hover:bg-brand-orange/90",
         outline: "border border-gray-200 bg-white hover:bg-gray-100",
-        // Added secondary variant to fix your TypeScript error
         secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200", 
+        ghost: "hover:bg-accent hover:text-accent-foreground",
       },
       size: {
         default: "h-10 px-4 py-2",

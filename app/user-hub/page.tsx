@@ -32,7 +32,7 @@ interface UserDashboardProps {
   userName?: string;
 }
 
-export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashboardProps) {
+export default function UserDashboard({ tier = 'INTERNATIONAL', userName }: UserDashboardProps) {
   const router = useRouter();
   const [totalItineraries, setTotalItineraries] = useState(0);
   const [confirmedBookings, setConfirmedBookings] = useState(0);
@@ -47,7 +47,7 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
   const [loggingOut, setLoggingOut] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
-  // Digital Storefront State (Vendor Database Items with rich visual fallback matching)
+  // Digital Storefront State
   const [storefrontItems, setStorefrontItems] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [loadingStore, setLoadingStore] = useState(true);
@@ -70,24 +70,32 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
       const currentUser = session.user;
       const userId = currentUser.id;
 
-      // Extract avatar from provider metadata first
       const metaAvatar = currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture;
       if (metaAvatar) setAvatarUrl(metaAvatar);
 
-      // Fetch user profile from database to get official residency tier and full name
-      const { data: profile } = await (supabase.from('profiles') as any)
-        .select('full_name, name, username, avatar_url, residency_tier, tier')
+      // Query the `profiles` table selecting all common variations of residency/tier columns
+      const { data: profile, error: profileError } = await (supabase.from('profiles' as any) as any)
+        .select('*')
         .eq('id', userId)
         .single();
       
-      const resolvedTier = profile?.residency_tier || profile?.tier || tier;
-      setUserTier(resolvedTier.toUpperCase());
+      console.log('Supabase profile query result:', profile, profileError);
+
+      // Extract residency tier strictly from profile or user metadata, checking all possible column names
+      const dbTier = 
+        profile?.residency_tier || 
+        profile?.tier || 
+        profile?.residency || 
+        currentUser.user_metadata?.residency_tier || 
+        currentUser.user_metadata?.tier || 
+        tier;
+
+      setUserTier(dbTier.toUpperCase());
 
       if (profile?.avatar_url && !metaAvatar) {
         setAvatarUrl(profile.avatar_url);
       }
 
-      // Resolve full name robustly across profile and user metadata
       const resolvedName = 
         profile?.full_name || 
         profile?.name || 
@@ -99,31 +107,27 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
 
       setDisplayName(resolvedName);
 
-      // Fetch itineraries linked to this specific user profile
-      const { data: itineraries, error } = await supabase
-        .from('itineraries')
+      const { data: itineraries, error } = await (supabase.from('itineraries' as any) as any)
         .select('*')
         .eq('user_id', userId)
         .order('id', { ascending: false });
 
       if (itineraries && !error) {
         setItineraryList(itineraries);
-        applyTierAndFilter(itineraries, resolvedTier, activeFilter);
+        applyTierAndFilter(itineraries, dbTier, activeFilter);
       }
 
-      // Fetch live vendor items from the database (`lifestyle_hub_items` / `storefront_items`)
+      // Fetch live vendor items from Supabase (`lifestyle_hub_items` / `storefront_items`)
       let rawStoreData: any[] | null = null;
       
-      const { data: primaryStore } = await supabase
-        .from('lifestyle_hub_items')
+      const { data: primaryStore } = await (supabase.from('lifestyle_hub_items' as any) as any)
         .select('*')
         .order('created_at', { ascending: false });
 
       if (primaryStore && primaryStore.length > 0) {
         rawStoreData = primaryStore;
       } else {
-        const { data: fallbackStore } = await supabase
-          .from('storefront_items')
+        const { data: fallbackStore } = await (supabase.from('storefront_items' as any) as any)
           .select('*')
           .order('created_at', { ascending: false });
         
@@ -132,7 +136,6 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
         }
       }
 
-      // Curated high-fidelity image mapping for vendor items based on title keywords
       const getImageForProduct = (title: string, category: string, existingImage?: string) => {
         if (existingImage && existingImage.startsWith('http')) return existingImage;
         const lower = (title + ' ' + category).toLowerCase();
@@ -149,7 +152,7 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
       };
 
       if (rawStoreData && rawStoreData.length > 0) {
-        const enhancedStoreItems = rawStoreData.map(item => ({
+        const enhancedStoreItems = rawStoreData.map((item: any) => ({
           ...item,
           title: item.title || item.name || 'Vendor Digital Asset',
           description: item.description || item.details || 'Instant digital fulfillment available through your client account.',
@@ -159,7 +162,6 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
         }));
         setStorefrontItems(enhancedStoreItems);
       } else {
-        // Fallback default items if database is empty
         setStorefrontItems([
           {
             id: 'psn-100',
@@ -195,17 +197,16 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
     fetchUserHubData();
   }, [tier, userName]);
 
-  // Apply tier filtering whenever userTier or list changes
   const applyTierAndFilter = (list: any[], currentTier: string, filter: 'all' | 'draft' | 'confirmed') => {
     const targetTier = currentTier.toUpperCase();
     
-    const validItineraries = list.filter(item => 
+    const validItineraries = list.filter((item: any) => 
       !item.tier || item.tier.toUpperCase() === targetTier
     );
 
     setTotalItineraries(validItineraries.length);
-    const drafts = validItineraries.filter(item => item.status === 'draft' || item.status === 'secured' || !item.status);
-    const booked = validItineraries.filter(item => item.status === 'confirmed');
+    const drafts = validItineraries.filter((item: any) => item.status === 'draft' || item.status === 'secured' || !item.status);
+    const booked = validItineraries.filter((item: any) => item.status === 'confirmed');
     
     setDraftSessions(drafts.length);
     setConfirmedBookings(booked.length);
@@ -291,11 +292,11 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
   }
 
   const initials = displayName && displayName !== 'Valued Explorer' && displayName !== 'Loading...'
-    ? displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    ? displayName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
     : 'EX';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 pt-28 pb-12 space-y-8 text-slate-100 bg-black min-h-screen">
+    <div className="max-w-7xl mx-auto px-4 pt-32 pb-16 space-y-8 text-slate-100 bg-black min-h-screen">
       
       {/* Hero Welcome Header & Stat Cards */}
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-neutral-900/90 border border-amber-500/20 p-8 rounded-3xl relative overflow-hidden backdrop-blur-xl shadow-2xl">
@@ -420,7 +421,7 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredList.map((item) => (
+                {filteredList.map((item: any) => (
                   <div 
                     key={item.id} 
                     className="bg-neutral-900/80 border border-neutral-800 hover:border-amber-500/40 transition-all rounded-2xl p-6 space-y-4 flex flex-col justify-between group shadow-lg"
@@ -465,7 +466,7 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
             )}
           </div>
 
-          {/* Lifestyle Hub Digital Storefront Section (Live Vendor DB Connected with Rich Visual Cards) */}
+          {/* Lifestyle Hub Digital Storefront Section */}
           <div className="space-y-4 pt-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2 text-white">
@@ -501,23 +502,21 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {storefrontItems.map((prod) => (
+                {storefrontItems.map((prod: any) => (
                   <div key={prod.id || prod.title} className="bg-neutral-900/80 border border-neutral-800 hover:border-amber-500/40 transition rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg group">
                     
-                    {/* Rich Visual Image Banner */}
-                    <div className="w-full h-40 bg-neutral-950 relative overflow-hidden">
+                    <div className="w-full h-44 bg-neutral-950 relative overflow-hidden flex items-center justify-center">
                       <img 
                         src={prod.image_url} 
                         alt={prod.title} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500 opacity-90"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-80" />
-                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                        <span className="text-[10px] font-mono uppercase tracking-wider bg-black/80 backdrop-blur-md text-amber-300 px-2.5 py-1 rounded-md border border-amber-500/30 shadow-md">
+                      <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent" />
+                      
+                      <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10">
+                        <span className="text-[10px] font-mono uppercase tracking-wider bg-black/85 backdrop-blur-md text-amber-300 px-2.5 py-1 rounded-md border border-amber-500/30 shadow-md">
                           {prod.category || 'Vendor Asset'}
                         </span>
-                      </div>
-                      <div className="absolute top-2.5 right-2.5">
                         <span className="text-[10px] font-mono uppercase tracking-wider bg-emerald-950/90 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700/60 shadow">
                           Active
                         </span>
@@ -605,18 +604,17 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
                 href="https://wa.me/255666281717?text=Hello%20Escape%2B%20Tours,%20I%20would%20like%20assistance%20from%20the%20concierge."
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 text-center bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 font-bold py-3 rounded-xl transition text-xs uppercase tracking-wider border border-emerald-800 shadow-md"
+                className="w-full flex items-center justify-center gap-2 text-center bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 font-bold py-3 rounded-xl transition text-xs uppercase tracking-wider border border-emerald-700/50 shadow"
               >
-                <MessageCircle size={14} /> Contact Dedicated Concierge
+                <MessageCircle size={16} /> WhatsApp Concierge Support
               </a>
-
               <button 
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="w-full flex items-center justify-center gap-2 text-center bg-red-950/40 hover:bg-red-900/60 text-red-300 font-bold py-3 rounded-xl transition text-xs uppercase tracking-wider border border-red-800/60 shadow-md"
+                className="w-full flex items-center justify-center gap-2 text-center bg-neutral-800 hover:bg-red-950 hover:text-red-300 hover:border-red-800 text-slate-300 font-bold py-3 rounded-xl transition text-xs uppercase tracking-wider border border-neutral-700 shadow"
               >
-                {loggingOut ? <Loader2 className="animate-spin" size={14} /> : <LogOut size={14} />}
-                Log Out of User Hub (`UserDashboard.tsx`)
+                {loggingOut ? <Loader2 className="animate-spin" size={14} /> : <LogOut size={14} />} 
+                {loggingOut ? 'Terminating Session...' : 'Sign Out of Secure Portal'}
               </button>
             </div>
           </div>
