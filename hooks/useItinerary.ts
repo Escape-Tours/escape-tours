@@ -17,11 +17,19 @@ export const useItinerary = () => {
     { id: 'day-1', dayNumber: 1, items: [] }
   ]);
 
+  // Mobile drawer visibility state to display added items on mobile screens
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
   // 1. Add item
   const addItemToDay = useCallback((dayId: string, item: ItineraryItem) => {
     setDays(prev => prev.map(day => 
       day.id === dayId ? { ...day, items: [...day.items, item] } : day
     ));
+
+    // Automatically trigger mobile drawer open on mobile viewports (< 768px)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsMobileDrawerOpen(true);
+    }
   }, []);
 
   // 2. Remove item
@@ -84,6 +92,9 @@ export const useItinerary = () => {
 
   return { 
     days, 
+    setDays,
+    isMobileDrawerOpen,
+    setIsMobileDrawerOpen,
     addItemToDay, 
     removeItemFromDay, 
     addDay, 

@@ -4,24 +4,17 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ChevronDown, Wand2, User, Store, Gift, LogOut, ShieldCheck, ShoppingBag, Trash2, ArrowRight, Truck } from "lucide-react";
+import { Menu, X, ChevronDown, Wand2, User, Store, Gift, LogOut, ShieldCheck, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createBrowserClient } from "@supabase/ssr";
-import { useItineraryStore } from "@/store/useItineraryStore";
 
 export function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [safariDropdownOpen, setSafariDropdownOpen] = useState(false);
-  const [trekkingDropdownOpen, setTrekkingDropdownOpen] = useState(false);
   const [userHubDropdownOpen, setUserHubDropdownOpen] = useState(false);
-  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  // Zustand Store for Itinerary Cart Items
-  const { items, removeItem, clearItinerary } = useItineraryStore();
-  const [animatingBadge, setAnimatingBadge] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,15 +39,6 @@ export function Navigation() {
       subscription.unsubscribe();
     };
   }, [supabase]);
-
-  // Trigger bounce animation when cart items change
-  useEffect(() => {
-    if (items.length > 0) {
-      setAnimatingBadge(true);
-      const timer = setTimeout(() => setAnimatingBadge(false), 600);
-      return () => clearTimeout(timer);
-    }
-  }, [items.length]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -106,22 +90,6 @@ export function Navigation() {
                 <Wand2 size={15} />
                 BUILDER
               </Link>
-
-              {/* Itinerary Cart Trigger Button with Animation */}
-              <button
-                onClick={() => setCartDrawerOpen(true)}
-                className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 text-white font-bold text-xs shadow-md hover:bg-amber-600 transition-all ${
-                  animatingBadge ? "scale-110 ring-4 ring-amber-300" : ""
-                }`}
-              >
-                <ShoppingBag size={15} />
-                <span>Itinerary Cart</span>
-                {items.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-slate-900 text-amber-300 border border-amber-500 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold animate-bounce">
-                    {items.length}
-                  </span>
-                )}
-              </button>
 
               <Link href="/packages" className={navLinkClass}>Packages</Link>
               <Link href="/hotels" className={navLinkClass}>Hotels</Link>
@@ -234,9 +202,6 @@ export function Navigation() {
                 <Link href="/itinerary-builder" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-50 text-[#d97706] font-bold text-xs">
                   <Wand2 size={14} /> Builder
                 </Link>
-                <button onClick={() => { setMobileMenuOpen(false); setCartDrawerOpen(true); }} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-500 text-white font-bold text-xs">
-                  <ShoppingBag size={14} /> Cart ({items.length})
-                </button>
                 <Link href="/user-hub" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-amber-300 font-bold text-xs">
                   <User size={14} /> User Hub
                 </Link>
@@ -246,8 +211,8 @@ export function Navigation() {
                 <Link href="/lifestyle-hub" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-100 text-amber-900 font-bold text-xs">
                   <Gift size={14} /> Lifestyle Hub
                 </Link>
-                <Link href="/driver-portal" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-emerald-400 font-bold text-xs">
-                  <Truck size={14} /> Driver
+                <Link href="/driver-portal" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-emerald-400 font-bold text-xs col-span-2">
+                  <Truck size={14} /> Driver Portal
                 </Link>
               </div>
 
@@ -260,94 +225,6 @@ export function Navigation() {
           )}
         </AnimatePresence>
       </nav>
-
-      {/* Slide-Over Itinerary Cart Drawer */}
-      <AnimatePresence>
-        {cartDrawerOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            {/* Backdrop */}
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setCartDrawerOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-
-            {/* Drawer Content */}
-            <motion.div 
-              initial={{ x: "100%" }} 
-              animate={{ x: 0 }} 
-              exit={{ x: "100%" }} 
-              transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col z-10"
-            >
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-amber-50/50">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-amber-500 text-white">
-                    <ShoppingBag size={20} />
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-lg text-[#41210a]">Itinerary Cart</h2>
-                    <p className="text-xs text-gray-500">{items.length} items picked for your trip</p>
-                  </div>
-                </div>
-                <button onClick={() => setCartDrawerOpen(false)} className="p-2 rounded-full hover:bg-gray-200 text-gray-600 transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Items List */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {items.length === 0 ? (
-                  <div className="text-center py-20">
-                    <ShoppingBag size={48} className="mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-600 font-bold">Your itinerary cart is empty</p>
-                    <p className="text-xs text-gray-400 mt-1">Browse hotels, safaris, or parks and click "Add to Itinerary" to build your custom adventure.</p>
-                  </div>
-                ) : (
-                  items.map((item: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50 border border-gray-100 shadow-sm">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-100 px-2 py-0.5 rounded-md">
-                          {item.item_type || 'Selected Experience'}
-                        </span>
-                        <h4 className="font-bold text-sm text-[#41210a] mt-1">{item.title || item.name || item.item_name}</h4>
-                        <p className="text-xs text-gray-500 font-medium">{item.price ? `$${item.price}` : 'Live Rate Custom'}</p>
-                      </div>
-                      <button 
-                        onClick={() => removeItem(item.id || item.item_id)}
-                        className="p-2 rounded-xl text-red-500 hover:bg-red-50 transition-colors"
-                        title="Remove Item"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Footer Actions */}
-              {items.length > 0 && (
-                <div className="p-6 border-t border-gray-100 bg-gray-50 space-y-3">
-                  <Button asChild className="w-full bg-[#d97706] hover:bg-[#b45309] text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2">
-                    <Link href="/itinerary-builder" onClick={() => setCartDrawerOpen(false)}>
-                      <span>Build Itinerary From Cart</span>
-                      <ArrowRight size={18} />
-                    </Link>
-                  </Button>
-                  <button 
-                    onClick={clearItinerary}
-                    className="w-full text-center text-xs text-red-500 font-bold hover:underline py-1"
-                  >
-                    Clear All Items
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </>
   );
 }

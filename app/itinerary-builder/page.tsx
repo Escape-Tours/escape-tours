@@ -9,7 +9,7 @@ import { SlideTrigger } from '@/components/ui/SlideTrigger';
 import { ItineraryBuilder } from './ItineraryCategoryExplorer';
 import DayCard from '@/components/itinerary/DayCard';
 import AIAssistantDrawer from '@/components/itinerary/AIAssistantDrawer';
-import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, ShieldCheck, Download, Menu, X, SlidersHorizontal } from 'lucide-react';
+import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, ShieldCheck, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { saveItinerary } from '@/lib/services/itineraryService';
 import { validatePayload } from '@/lib/services/stagingValidator';
 import { Day, ItineraryItem } from '@/lib/types/itinerary-types';
@@ -41,10 +41,10 @@ export const SafariStudio = () => {
   ]);
   
   const [residencyTier, setResidencyTier] = useState<ResidencyTier>('CITIZEN'); 
-  const [isBrowsing, setIsBrowsing] = useState(false);
+  const [isStudioOpen, setIsStudioOpen] = useState(true);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(true);
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileActiveTab, setMobileActiveTab] = useState<'timeline' | 'map' | 'catalog'>('timeline');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
   const [pdfStatus, setPdfStatus] = useState<'idle' | 'generating' | 'success'>('idle');
@@ -261,7 +261,7 @@ export const SafariStudio = () => {
         </div>
       )}
 
-      {/* Map Background for Desktop / Mobile View Layer */}
+      {/* Map Background Layer */}
       <div className={`absolute inset-0 z-0 ${mobileActiveTab === 'map' ? 'block' : 'hidden lg:block'}`}>
         <ItineraryMapOverlay locations={mapLocations} />
       </div>
@@ -303,187 +303,219 @@ export const SafariStudio = () => {
         </button>
       </div>
 
-      {/* Main Studio Sidebar / Timeline Container */}
-      <aside className={`relative h-full p-3 sm:p-5 z-20 transition-all duration-700 ease-in-out w-full lg:w-[740px] ${mobileActiveTab === 'timeline' ? 'flex' : 'hidden lg:flex'} flex-col pb-20 lg:pb-5`}>
-        <div ref={printRef} className={`h-full ${containerTheme.base} rounded-[2rem] sm:rounded-[2.5rem] border shadow-2xl p-4 sm:p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
-          
-          {!isAuthenticated && (
-            <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
-              <div className="w-16 h-16 rounded-3xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 mb-4 shadow-lg">
-                <Lock size={28} />
-              </div>
-              <h2 className="text-xl font-black text-white tracking-tight mb-2">Authentication Required</h2>
-              <p className="text-xs text-slate-400 mb-6 max-w-[280px]">Please log in to your User Hub account to initialize and build your custom safari itinerary blueprint.</p>
-              <button 
-                type="button"
-                onClick={() => router.push('/login')}
-                className="px-6 py-3 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider hover:bg-amber-300 transition-all shadow-lg cursor-pointer"
-              >
-                Sign In to Access Builder
-              </button>
-            </div>
-          )}
-
-          <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-2xl ${containerTheme.glow} border flex items-center justify-center ${containerTheme.accent}`}>
-                <Compass size={20} className="animate-spin-slow" />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[9px] sm:text-[10px] tracking-widest font-black uppercase px-2 py-0.5 rounded-md border ${containerTheme.badge}`}>Studio Master Blueprint</span>
-                </div>
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-0.5">Safari Odyssey</h1>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 sm:gap-2 no-print">
-              <button
-                type="button"
-                onClick={handleExportPDF}
-                disabled={pdfStatus === 'generating'}
-                className={`flex items-center gap-1 px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
-                  pdfStatus === 'success'
-                    ? 'bg-emerald-500 text-slate-950 shadow-lg'
-                    : 'bg-white/10 hover:bg-white/20 text-slate-300'
-                }`}
-                title="Download Professional Itinerary PDF"
-              >
-                {pdfStatus === 'generating' && <Loader2 size={14} className="animate-spin text-amber-400" />}
-                {pdfStatus === 'success' && <CheckCircle2 size={14} />}
-                {pdfStatus === 'idle' && <Download size={14} />}
-                <span className="hidden sm:inline">{pdfStatus === 'generating' ? 'Exporting...' : pdfStatus === 'success' ? 'Downloaded!' : 'PDF'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleShareLink}
-                className="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer relative"
-                title="Share Itinerary Link"
-              >
-                <Share2 size={14} />
-                {shareCopied && (
-                  <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
-                    Copied Link!
-                  </span>
-                )}
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => setIsAiOpen(true)}
-                className="group relative flex items-center gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-amber-400/50 text-amber-300 font-black text-xs tracking-wider uppercase hover:border-amber-400 transition-all shadow-lg hover:scale-105 cursor-pointer"
-                title="Awaken AI Architect"
-              >
-                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-                </span>
-                <Bot size={14} className="text-amber-400 group-hover:rotate-12 transition-transform" />
-                <span className="hidden sm:inline text-amber-300">AI</span>
-              </button>
-
-              <button 
-                type="button"
-                onClick={handleSave}
-                disabled={saveStatus === 'saving'}
-                className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
-                  saveStatus === 'success' 
-                    ? 'bg-emerald-500 text-slate-950 shadow-lg' 
-                    : 'bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-lg'
-                }`}
-              >
-                {saveStatus === 'saving' && <Loader2 size={14} className="animate-spin" />}
-                {saveStatus === 'success' && <CheckCircle2 size={14} />}
-                {saveStatus === 'idle' && <Save size={14} />}
-                <span className="hidden sm:inline">{saveStatus === 'saving' ? 'Syncing...' : saveStatus === 'success' ? 'Secured!' : 'Save'}</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-3 flex items-center gap-3 shadow-md">
-              <div className="w-8 h-8 rounded-xl bg-amber-400/10 flex items-center justify-center text-amber-400">
-                <Layers size={16} />
-              </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Duration</p>
-                <p className="text-sm font-black text-white">{days.length} {days.length === 1 ? 'Day' : 'Days'}</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-3 flex items-center gap-3 shadow-md">
-              <div className="w-8 h-8 rounded-xl bg-emerald-400/10 flex items-center justify-center text-emerald-400">
-                <MapPin size={16} />
-              </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Mapped Stops</p>
-                <p className="text-sm font-black text-white">{allItineraryItems.length} Locations</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Day Cards List Container */}
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar bg-slate-950 mb-4">
-            {days.map((day) => (
-              <DayCard 
-                key={day.id} 
-                day={day} 
-                residencyTier={residencyTier}
-                guests={guests} 
-                setGuests={setGuests} 
-                onMoveItem={handleMoveItem} 
-                onRemoveItem={handleRemoveItem} 
-                onDeleteDay={handleDeleteDay} 
-              />
-            ))}
-
-            <button 
-              type="button"
-              onClick={addDay} 
-              className="w-full py-4 border-2 border-dashed border-white/15 rounded-2xl text-slate-300 font-bold text-xs tracking-wider uppercase hover:border-amber-400/50 hover:bg-amber-400/5 hover:text-amber-400 transition-all flex items-center justify-center gap-2 group cursor-pointer shadow-inner no-print"
-            >
-              <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-              <span>Add New Day</span>
-            </button>
-          </div>
-
-        </div>
-      </aside>
-
-      {/* Desktop Slide Trigger Button */}
-      <div className="hidden lg:flex flex-1 items-center justify-center z-20 pointer-events-none">
-        {!isBrowsing && isAuthenticated && (
-          <div className="pointer-events-auto animate-bounce-subtle">
-            <SlideTrigger onOpen={() => setIsBrowsing(true)} />
-          </div>
+      {/* Left Collapsible Studio Drawer + Slide Trigger */}
+      <div className="relative z-20 flex h-full items-center">
+        {/* Slide Trigger for Studio when closed */}
+        {!isStudioOpen && isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => setIsStudioOpen(true)}
+            className="absolute left-0 z-30 bg-slate-900/90 hover:bg-slate-900 border border-amber-500/40 text-amber-400 p-3 rounded-r-2xl shadow-2xl backdrop-blur-md flex items-center gap-2 transition-all hover:scale-105 cursor-pointer"
+            title="Pull to Slide Studio"
+          >
+            <ChevronRight size={18} className="animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-widest writing-mode-vertical">Open Studio</span>
+          </button>
         )}
-      </div>
 
-      {/* Experience Catalog Drawer (Desktop & Mobile) */}
-      {(isBrowsing || mobileActiveTab === 'catalog') && isAuthenticated && (
-        <aside className={`w-full lg:w-[420px] h-full bg-slate-950 backdrop-blur-2xl shadow-2xl z-30 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col absolute lg:relative inset-0 ${mobileActiveTab === 'catalog' ? 'flex' : 'hidden lg:flex'}`}>
-          <div className="flex p-4 sm:p-5 border-b border-white/10 justify-between items-center bg-slate-900">
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-amber-400" />
-              <span className="text-xs font-black tracking-widest text-white uppercase">Experience Catalog ({residencyTier})</span>
+        {/* Main Studio Sidebar / Timeline Container */}
+        <aside className={`relative h-full p-3 sm:p-5 transition-all duration-500 ease-in-out w-full lg:w-[740px] ${isStudioOpen ? 'translate-x-0 opacity-100 flex' : '-translate-x-full opacity-0 absolute pointer-events-none'} ${mobileActiveTab === 'timeline' ? 'flex' : 'hidden lg:flex'} flex-col pb-20 lg:pb-5`}>
+          <div ref={printRef} className={`h-full ${containerTheme.base} rounded-[2rem] sm:rounded-[2.5rem] border shadow-2xl p-4 sm:p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
+            
+            {!isAuthenticated && (
+              <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+                <div className="w-16 h-16 rounded-3xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 mb-4 shadow-lg">
+                  <Lock size={28} />
+                </div>
+                <h2 className="text-xl font-black text-white tracking-tight mb-2">Authentication Required</h2>
+                <p className="text-xs text-slate-400 mb-6 max-w-[280px]">Please log in to your User Hub account to initialize and build your custom safari itinerary blueprint.</p>
+                <button 
+                  type="button"
+                  onClick={() => router.push('/login')}
+                  className="px-6 py-3 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider hover:bg-amber-300 transition-all shadow-lg cursor-pointer"
+                >
+                  Sign In to Access Builder
+                </button>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-2xl ${containerTheme.glow} border flex items-center justify-center ${containerTheme.accent}`}>
+                  <Compass size={20} className="animate-spin-slow" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[9px] sm:text-[10px] tracking-widest font-black uppercase px-2 py-0.5 rounded-md border ${containerTheme.badge}`}>Studio Master Blueprint</span>
+                  </div>
+                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-0.5">Safari Odyssey</h1>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 no-print">
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  disabled={pdfStatus === 'generating'}
+                  className={`flex items-center gap-1 px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                    pdfStatus === 'success'
+                      ? 'bg-emerald-500 text-slate-950 shadow-lg'
+                      : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                  }`}
+                  title="Download Professional Itinerary PDF"
+                >
+                  {pdfStatus === 'generating' && <Loader2 size={14} className="animate-spin text-amber-400" />}
+                  {pdfStatus === 'success' && <CheckCircle2 size={14} />}
+                  {pdfStatus === 'idle' && <Download size={14} />}
+                  <span className="hidden sm:inline">{pdfStatus === 'generating' ? 'Exporting...' : pdfStatus === 'success' ? 'Downloaded!' : 'PDF'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleShareLink}
+                  className="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer relative"
+                  title="Share Itinerary Link"
+                >
+                  <Share2 size={14} />
+                  {shareCopied && (
+                    <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
+                      Copied Link!
+                    </span>
+                  )}
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => setIsAiOpen(true)}
+                  className="group relative flex items-center gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-amber-400/50 text-amber-300 font-black text-xs tracking-wider uppercase hover:border-amber-400 transition-all shadow-lg hover:scale-105 cursor-pointer"
+                  title="Awaken AI Architect"
+                >
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                  </span>
+                  <Bot size={14} className="text-amber-400 group-hover:rotate-12 transition-transform" />
+                  <span className="hidden sm:inline text-amber-300">AI</span>
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saveStatus === 'saving'}
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                    saveStatus === 'success' 
+                      ? 'bg-emerald-500 text-slate-950 shadow-lg' 
+                      : 'bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-lg'
+                  }`}
+                >
+                  {saveStatus === 'saving' && <Loader2 size={14} className="animate-spin" />}
+                  {saveStatus === 'success' && <CheckCircle2 size={14} />}
+                  {saveStatus === 'idle' && <Save size={14} />}
+                  <span className="hidden sm:inline">{saveStatus === 'saving' ? 'Syncing...' : saveStatus === 'success' ? 'Secured!' : 'Save'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsStudioOpen(false)}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-colors cursor-pointer ml-1"
+                  title="Hide Studio Drawer"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+              </div>
             </div>
-            <button 
-              type="button"
-              onClick={() => {
-                setIsBrowsing(false);
-                setMobileActiveTab('timeline');
-              }} 
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[10px] tracking-wider uppercase transition-colors cursor-pointer"
-            >
-              Close Drawer
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar pb-20 lg:pb-0">
-            <ItineraryBuilder residencyTier={residencyTier} />
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-slate-900 border border-white/10 rounded-2xl p-3 flex items-center gap-3 shadow-md">
+                <div className="w-8 h-8 rounded-xl bg-amber-400/10 flex items-center justify-center text-amber-400">
+                  <Layers size={16} />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Duration</p>
+                  <p className="text-sm font-black text-white">{days.length} {days.length === 1 ? 'Day' : 'Days'}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-white/10 rounded-2xl p-3 flex items-center gap-3 shadow-md">
+                <div className="w-8 h-8 rounded-xl bg-emerald-400/10 flex items-center justify-center text-emerald-400">
+                  <MapPin size={16} />
+                </div>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Mapped Stops</p>
+                  <p className="text-sm font-black text-white">{allItineraryItems.length} Locations</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Day Cards List Container */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar bg-slate-950 mb-4">
+              {days.map((day) => (
+                <DayCard 
+                  key={day.id} 
+                  day={day} 
+                  residencyTier={residencyTier}
+                  guests={guests} 
+                  setGuests={setGuests} 
+                  onMoveItem={handleMoveItem} 
+                  onRemoveItem={handleRemoveItem} 
+                  onDeleteDay={handleDeleteDay} 
+                />
+              ))}
+
+              <button 
+                type="button"
+                onClick={addDay} 
+                className="w-full py-4 border-2 border-dashed border-white/15 rounded-2xl text-slate-300 font-bold text-xs tracking-wider uppercase hover:border-amber-400/50 hover:bg-amber-400/5 hover:text-amber-400 transition-all flex items-center justify-center gap-2 group cursor-pointer shadow-inner no-print"
+              >
+                <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
+                <span>Add New Day</span>
+              </button>
+            </div>
+
           </div>
         </aside>
-      )}
+      </div>
+
+      {/* Center Spacer over map */}
+      <div className="hidden lg:flex flex-1 pointer-events-none" />
+
+      {/* Right Collapsible Experience Catalog Drawer */}
+      <div className="relative z-20 flex h-full items-center">
+        {/* Slide Trigger for Catalog when closed */}
+        {!isCatalogOpen && isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => setIsCatalogOpen(true)}
+            className="absolute right-0 z-30 bg-slate-900/90 hover:bg-slate-900 border border-amber-500/40 text-amber-400 p-3 rounded-l-2xl shadow-2xl backdrop-blur-md flex items-center gap-2 transition-all hover:scale-105 cursor-pointer"
+            title="Pull to Slide Catalog"
+          >
+            <span className="text-[10px] font-black uppercase tracking-widest writing-mode-vertical">Catalog</span>
+            <ChevronLeft size={18} className="animate-pulse" />
+          </button>
+        )}
+
+        {isAuthenticated && (
+          <aside className={`w-full lg:w-[420px] h-full bg-slate-950/95 backdrop-blur-2xl shadow-2xl z-30 border-l border-white/10 flex flex-col transition-all duration-500 ease-in-out ${isCatalogOpen ? 'translate-x-0 opacity-100 flex' : 'translate-x-full opacity-0 absolute pointer-events-none'} ${mobileActiveTab === 'catalog' ? 'flex' : 'hidden lg:flex'} pb-20 lg:pb-0`}>
+            <div className="flex p-4 sm:p-5 border-b border-white/10 justify-between items-center bg-slate-900">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-amber-400" />
+                <span className="text-xs font-black tracking-widest text-white uppercase">Experience Catalog ({residencyTier})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCatalogOpen(false)}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[10px] tracking-wider uppercase transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Hide</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <ItineraryBuilder residencyTier={residencyTier} />
+            </div>
+          </aside>
+        )}
+      </div>
 
       {/* Cart Modal */}
       {isCartModalOpen && (
@@ -625,22 +657,23 @@ export const SafariStudio = () => {
                   setIsCartModalOpen(false);
                   handleSave();
                 }}
-              className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
-            >
-              Secure & Save Itinerary
-            </button>
+                className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
+              >
+                Secure & Save Itinerary
+              </button>
             </div>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
-    {isAuthenticated && (
-      <AIAssistantDrawer 
-        isOpen={isAiOpen} 
-        onClose={() => setIsAiOpen(false)} 
-        onApplyItinerary={handleApplyItinerary} 
+      {/* AI Assistant Drawer */}
+      <AIAssistantDrawer
+        isOpen={isAiOpen}
+        onClose={() => setIsAiOpen(false)}
+        days={days}
+        residencyTier={residencyTier}
+        onApplyItinerary={handleApplyItinerary}
       />
-    )}
     </div>
   );
 };

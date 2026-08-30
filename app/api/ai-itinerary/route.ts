@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
     const { prompt, tier, guests } = await req.json();
 
     if (!prompt || typeof prompt !== 'string') {
@@ -21,31 +22,35 @@ export async function POST(req: Request) {
     else if (lowerPrompt.includes('2 day') || lowerPrompt.includes('two day')) numberOfDays = 2;
     else if (lowerPrompt.includes('1 day') || lowerPrompt.includes('one day')) numberOfDays = 1;
 
-    // Fetch live rows from Supabase tables
-    let safaris: any[] = [];
-    let lodges: any[] = [];
-    let activities: any[] = [];
-
+    // Fetch live rows from the master inventory table using type filtering
+    let inventoryItems: any[] = [];
     try {
-      const res = await supabase.from('safaris').select('*').limit(30);
-      if (res.data) safaris = res.data;
+      const res = await supabase.from('inventory').select('*').limit(100);
+      if (res.data) inventoryItems = res.data;
     } catch (e) {
-      console.warn('safaris fetch error:', e);
+      console.warn('inventory fetch error:', e);
     }
 
-    try {
-      const res = await supabase.from('lodges').select('*').limit(30);
-      if (res.data) lodges = res.data;
-    } catch (e) {
-      console.warn('lodges fetch error:', e);
-    }
+    // Categorize inventory items based on table/metadata type fields
+    const safaris = inventoryItems.filter(i => {
+      const t = (i.type || i.category || '').toLowerCase();
+      return t === 'safaris' || t === 'safari' || t === 'parks' || t === 'park';
+    });
 
-    try {
-      const res = await supabase.from('activities').select('*').limit(30);
-      if (res.data) activities = res.data;
-    } catch (e) {
-      console.warn('activities fetch error:', e);
-    }
+    const lodges = inventoryItems.filter(i => {
+      const t = (i.type || i.category || '').toLowerCase();
+      return t === 'lodges' || t === 'hotel' || t === 'hotels';
+    });
+
+    const activities = inventoryItems.filter(i => {
+      const t = (i.type || i.category || '').toLowerCase();
+      return t === 'activities' || t === 'activity' || t === 'treks' || t === 'trek';
+    });
+
+    // Fallback to general inventory if specific type lists are empty
+    const poolSafaris = safaris.length > 0 ? safaris : inventoryItems;
+    const poolLodges = lodges.length > 0 ? lodges : inventoryItems;
+    const poolActivities = activities.length > 0 ? activities : inventoryItems;
 
     // Filter items based on prompt keywords (Serengeti, Ngorongoro, Zanzibar, Mikumi)
     const filterByPrompt = (items: any[]) => {
@@ -63,11 +68,11 @@ export async function POST(req: Request) {
       return matched.length > 0 ? matched : items;
     };
 
-    const targetSafaris = filterByPrompt(safaris);
-    const targetActivities = filterByPrompt(activities);
-    const targetLodges = filterByPrompt(lodges);
+    const targetSafaris = filterByPrompt(poolSafaris);
+    const targetActivities = filterByPrompt(poolActivities);
+    const targetLodges = filterByPrompt(poolLodges);
 
-    // Realistic fallback catalog tailored to prompt keywords if database tables happen to be empty
+    // Realistic fallback catalog tailored to prompt keywords if database catalog happens to be empty
     const getFallbackName = () => {
       if (lowerPrompt.includes('serengeti')) return 'Serengeti Endless Plains Migration Safari';
       if (lowerPrompt.includes('ngorongoro')) return 'Ngorongoro Crater Floor Descent & Wildlife';
@@ -80,8 +85,8 @@ export async function POST(req: Request) {
         id: crypto.randomUUID(),
         name: getFallbackName(),
         base_price: 350,
-        lat: lowerPrompt.includes('zanzibar') ? -6.1659 : lowerPrompt.includes('ngorongoro') ? -3.1667 : lowerPrompt.includes('serengeti') ? -2.3333 : -7.4000,
-        lng: lowerPrompt.includes('zanzibar') ? 39.2026 : lowerPrompt.includes('ngorongoro') ? 35.5833 : lowerPrompt.includes('serengeti') ? 34.8333 : 37.0000,
+        lat: lowerPrompt.includes('zanzibar') ? -6.1659 : lowerPrompt.includes('ngorongoro') ? -3.1667 : lowerPrompt.includes('serengeti') ? -2.3333 : -7.4116,
+        lng: lowerPrompt.includes('zanzibar') ? 39.2026 : lowerPrompt.includes('ngorongoro') ? 35.5833 : lowerPrompt.includes('serengeti') ? 34.8333 : 37.0784,
         pricing_matrix: { INTERNATIONAL: 350, RESIDENT: 250, CITIZEN: 150 },
         metadata: { type: 'SAFARI' }
       },
@@ -106,8 +111,9 @@ export async function POST(req: Request) {
     ];
 
     const generatedDays = Array.from({ length: numberOfDays }, (_, index) => {
-      const sItem = targetSafaris[index % targetSafaris.length] || targetSafaris[0] || fallbackCatalog[0];
+      // Enforce requested structure: Morning = Activity, Afternoon = Park/Safari, Evening = Hotel/Lodge
       const aItem = targetActivities[index % targetActivities.length] || targetActivities[0] || fallbackCatalog[1];
+      const sItem = targetSafaris[index % targetSafaris.length] || targetSafaris[0] || fallbackCatalog[0];
       const lItem = targetLodges[index % targetLodges.length] || targetLodges[0] || fallbackCatalog[2];
 
       const formatItem = (dbItem: any, defaultType: string) => {
@@ -116,21 +122,21 @@ export async function POST(req: Request) {
           id: dbItem.id || crypto.randomUUID(),
           name: dbItem.name || 'Custom Experience',
           basePrice: basePrice,
-          lat: dbItem.lat ?? -6.8235,
-          lng: dbItem.lng ?? 39.2695,
+          lat: dbItem.lat ?? dbItem.latitude ?? -6.8235,
+          lng: dbItem.lng ?? dbItem.longitude ?? 39.2695,
           pricing_matrix: dbItem.pricing_matrix || { INTERNATIONAL: basePrice, RESIDENT: Math.round(basePrice * 0.7), CITIZEN: Math.round(basePrice * 0.4) },
           metadata: dbItem.metadata || { type: defaultType }
         };
       };
 
-      const morningObj = formatItem(sItem, 'SAFARI');
-      const afternoonObj = formatItem(aItem, 'ACTIVITY');
+      const morningObj = formatItem(aItem, 'ACTIVITY');
+      const afternoonObj = formatItem(sItem, 'SAFARI');
       const eveningObj = formatItem(lItem, 'HOTEL');
 
       return {
         id: crypto.randomUUID(),
         day_number: index + 1,
-        location: morningObj.name.split('&')[0] || `Day ${index + 1} Circuit`,
+        location: afternoonObj.name.split('&')[0] || `Day ${index + 1} Circuit`,
         slots: [
           {
             id: crypto.randomUUID(),
@@ -159,7 +165,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Itinerary successfully architected with matched locations and active pricing rates.',
+      message: 'Itinerary successfully architected with Morning Activity, Afternoon Park/Safari, and Evening Hotel slots matched closely to your catalog.',
       days: generatedDays,
       metadata: {
         tier: tier || 'INTERNATIONAL',
