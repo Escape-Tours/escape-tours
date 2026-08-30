@@ -82,6 +82,106 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, onQuickAdd, draggedI
 
 InventoryItem.displayName = 'InventoryItem';
 
+interface MobileSlotPickerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  item: BuilderItem | null;
+  days: any[];
+  onConfirm: (dayId: string, slot: 'morning' | 'afternoon' | 'evening', item: BuilderItem) => void;
+  onAddNewDay: () => void;
+}
+
+const MobileSlotPickerModal = ({ 
+  isOpen, 
+  onClose, 
+  item, 
+  days, 
+  onConfirm,
+  onAddNewDay
+}: MobileSlotPickerModalProps) => {
+  const [selectedDayId, setSelectedDayId] = useState<string>('');
+  const [selectedSlot, setSelectedSlot] = useState<'morning' | 'afternoon' | 'evening'>('morning');
+
+  useEffect(() => {
+    if (days.length > 0 && (!selectedDayId || !days.some(d => d.id === selectedDayId))) {
+      setSelectedDayId(days[0].id);
+    }
+  }, [days, selectedDayId]);
+
+  if (!isOpen || !item) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 text-white space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold text-amber-400 text-sm uppercase tracking-wider">Add to Itinerary Slot</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1">✕</button>
+        </div>
+
+        <p className="text-xs text-slate-300 font-medium bg-slate-950 p-3 rounded-xl border border-slate-800 line-clamp-2">{item.name}</p>
+
+        {/* Select Day */}
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-center">
+            <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Select Day</label>
+            <button 
+              type="button" 
+              onClick={onAddNewDay} 
+              className="text-[10px] text-amber-400 hover:underline font-bold tracking-wide"
+            >
+              + Add New Day
+            </button>
+          </div>
+          <select 
+            value={selectedDayId} 
+            onChange={(e) => setSelectedDayId(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-amber-500"
+          >
+            {days.map((day, index) => (
+              <option key={day.id || index} value={day.id}>Day {day.dayNumber || index + 1}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Select Time Slot */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Select Time Slot</label>
+          <div className="grid grid-cols-3 gap-2">
+            {(['morning', 'afternoon', 'evening'] as const).map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => setSelectedSlot(slot)}
+                className={`py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all border ${
+                  selectedSlot === slot 
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md' 
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                {slot}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Confirm Button */}
+        <button
+          type="button"
+          onClick={() => {
+            if (selectedDayId) {
+              onConfirm(selectedDayId, selectedSlot, item);
+              onClose();
+            }
+          }}
+          className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black py-3 rounded-xl transition-all shadow-lg text-xs uppercase tracking-wider mt-2 cursor-pointer"
+        >
+          Confirm & Add Item
+        </button>
+      </div>
+    </div>
+  );
+};
+
 interface ItineraryBuilderProps {
   tier?: string;
   residencyTier?: string;
@@ -193,6 +293,17 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
   const setGuests = useItineraryStore((state: any) => state.setGuests ?? (() => {}));
   const storeItems = useItineraryStore((state: any) => state.items ?? []);
   const addItemStore = useItineraryStore((state: any) => state.addItem ?? state.addItemToTimeline ?? (() => {}));
+  
+  // Day management selectors/actions from store if available
+  const storeDays = useItineraryStore((state: any) => state.days ?? []);
+  const addDayStore = useItineraryStore((state: any) => state.addDay ?? (() => {}));
+  const addItemToSlotStore = useItineraryStore((state: any) => state.addItemToSlot ?? ((dayId: string, slot: string, item: any) => addItemStore(item)));
+
+  // Fallback days array if storeDays isn't initialized natively
+  const activeDays = useMemo(() => {
+    if (storeDays && storeDays.length > 0) return storeDays;
+    return [{ id: 'day-1', dayNumber: 1, morning: null, afternoon: null, evening: null }];
+  }, [storeDays]);
 
   const { baseTotal, totalPrice } = useMemo(() => {
     if (!storeItems || storeItems.length === 0) return { baseTotal: 0, totalPrice: 0 };
@@ -220,6 +331,10 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+
+  // Mobile Slot Picker State
+  const [isSlotPickerOpen, setIsSlotPickerOpen] = useState(false);
+  const [selectedItemForModal, setSelectedItemForModal] = useState<BuilderItem | null>(null);
   
   const cache = useRef<Record<string, BuilderItem[]>>({});
 
@@ -264,6 +379,27 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(40);
     }
+    if (window.innerWidth < 768) {
+      setSelectedItemForModal(item);
+      setIsSlotPickerOpen(true);
+    } else {
+      const formattedItem = {
+        originalId: item.id,
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        price: item.price,
+        basePrice: item.price,
+        image_url: item.image_url,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        quantity: 1
+      };
+      addItemStore(formattedItem);
+    }
+  }, [addItemStore]);
+
+  const handleModalConfirm = useCallback((dayId: string, slot: 'morning' | 'afternoon' | 'evening', item: BuilderItem) => {
     const formattedItem = {
       originalId: item.id,
       id: item.id,
@@ -274,10 +410,16 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
       image_url: item.image_url,
       latitude: item.latitude,
       longitude: item.longitude,
-      quantity: 1
+      quantity: 1,
+      targetDayId: dayId,
+      targetSlot: slot
     };
-    addItemStore(formattedItem);
-  }, [addItemStore]);
+    addItemToSlotStore(dayId, slot, formattedItem);
+  }, [addItemToSlotStore]);
+
+  const handleAddNewDayFromModal = useCallback(() => {
+    addDayStore();
+  }, [addDayStore]);
 
   const filteredItems = useMemo(() => 
     items.filter(i => i.name.toLowerCase().includes(search.toLowerCase())), 
@@ -443,6 +585,16 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
           className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black tracking-wider uppercase text-xs py-3.5 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.25)] transition-all duration-300 hover:scale-[1.01] cursor-pointer" 
         />
       </div>
+
+      {/* Mobile Slot Picker Modal Integration */}
+      <MobileSlotPickerModal 
+        isOpen={isSlotPickerOpen}
+        onClose={() => setIsSlotPickerOpen(false)}
+        item={selectedItemForModal}
+        days={activeDays}
+        onConfirm={handleModalConfirm}
+        onAddNewDay={handleAddNewDayFromModal}
+      />
     </div>
   );
 };
