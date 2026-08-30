@@ -1,4 +1,3 @@
-// app/lifestyle-hub/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -27,9 +26,9 @@ export default function LifestyleHubPage() {
 
   const fetchStoreInventory = async (isInitial = false) => {
     try {
-      const { data, error } = await supabase
-        .from('inventory')
-        .select('*');
+      const { data, error } = await (supabase
+        .from('vendor_inventory' as any)
+        .select('*') as any);
 
       if (error) {
         console.error('Error fetching store items:', error.message);
@@ -64,12 +63,12 @@ export default function LifestyleHubPage() {
   useEffect(() => {
     fetchStoreInventory(true);
 
-    // Subscribe to real-time changes on inventory
+    // Subscribe to real-time changes on vendor_inventory
     const channel = supabase
       .channel('lifestyle-hub-inventory-sync')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory' },
+        { event: '*', schema: 'public', table: 'vendor_inventory' },
         (payload) => {
           console.log('Real-time inventory change detected:', payload);
           fetchStoreInventory(false);
