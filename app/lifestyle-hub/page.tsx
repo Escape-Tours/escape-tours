@@ -34,6 +34,7 @@ export default function LifestyleHubPage() {
       if (error) {
         console.error('Error fetching store items:', error.message);
       } else {
+        // Map raw data safely to StoreItem structure to resolve TypeScript union/missing property errors
         const mappedItems: StoreItem[] = (data || []).map((item: any) => ({
           id: item.id,
           name: item.title || item.name || 'Digital Item',
@@ -45,6 +46,7 @@ export default function LifestyleHubPage() {
           voucher_codes: item.voucher_codes
         }));
 
+        // Filter items that belong to Digital Store or gift cards/vouchers
         const digitalItems = mappedItems.filter(
           item => item.category === 'Digital Store' || item.category === 'PSN Gift Cards' || item.category.toLowerCase().includes('gift')
         );
@@ -62,6 +64,7 @@ export default function LifestyleHubPage() {
   useEffect(() => {
     fetchStoreInventory(true);
 
+    // Subscribe to real-time changes on inventory
     const channel = supabase
       .channel('lifestyle-hub-inventory-sync')
       .on(
@@ -74,6 +77,7 @@ export default function LifestyleHubPage() {
       )
       .subscribe();
 
+    // Safety fallback poll every 4 seconds to guarantee sync with Vendor Hub deletions/additions
     const intervalId = setInterval(() => {
       fetchStoreInventory(false);
     }, 4000);
@@ -87,12 +91,14 @@ export default function LifestyleHubPage() {
   useEffect(() => {
     let result = storeItems;
 
+    // Filter by category
     if (selectedCategory !== 'All') {
       result = result.filter(item => 
         item.category?.toLowerCase() === selectedCategory.toLowerCase()
       );
     }
 
+    // Filter by search query
     if (searchQuery.trim() !== '') {
       result = result.filter(item => 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -141,6 +147,7 @@ export default function LifestyleHubPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 pt-28 pb-20 px-4 sm:px-8 selection:bg-pink-500 selection:text-white">
       <div className="max-w-7xl mx-auto space-y-10">
         
+        {/* Magnificent Hero Banner */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-pink-950/80 via-slate-900 to-purple-950/80 border border-pink-500/30 p-8 sm:p-12 shadow-[0_0_50px_rgba(236,72,153,0.15)]">
           <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute right-20 top-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -168,7 +175,9 @@ export default function LifestyleHubPage() {
           </div>
         </div>
 
+        {/* Filters & Search Toolbar */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-900/60 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl">
+          {/* Categories */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
             <Filter size={16} className="text-pink-400 ml-2 mr-1 shrink-0" />
             {categories.map((cat) => (
@@ -186,6 +195,7 @@ export default function LifestyleHubPage() {
             ))}
           </div>
 
+          {/* Search Bar */}
           <div className="relative min-w-[240px] sm:w-72">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -198,6 +208,7 @@ export default function LifestyleHubPage() {
           </div>
         </div>
 
+        {/* Store Grid Section */}
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
