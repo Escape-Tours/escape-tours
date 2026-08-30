@@ -212,6 +212,53 @@ export function Navigation() {
             </button>
           </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="lg:hidden bg-white border-b border-gray-100 px-4 pt-2 pb-6 space-y-3 shadow-lg"
+            >
+              <Link href="/" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">Home</Link>
+              <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">About</Link>
+              <Link href="/northern-circuit" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">Northern Circuit Safaris</Link>
+              <Link href="/southern-circuit" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">Southern Circuit Safaris</Link>
+              <Link href="/zanzibar" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">Zanzibar Holidays</Link>
+              <Link href="/packages" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">Packages</Link>
+              <Link href="/hotels" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-bold text-[#41210a] uppercase">Hotels</Link>
+              
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                <Link href="/itinerary-builder" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-50 text-[#d97706] font-bold text-xs">
+                  <Wand2 size={14} /> Builder
+                </Link>
+                <button onClick={() => { setMobileMenuOpen(false); setCartDrawerOpen(true); }} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-500 text-white font-bold text-xs">
+                  <ShoppingBag size={14} /> Cart ({items.length})
+                </button>
+                <Link href="/user-hub" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-amber-300 font-bold text-xs">
+                  <User size={14} /> User Hub
+                </Link>
+                <Link href="/vendor-hub" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-pink-400 font-bold text-xs">
+                  <Store size={14} /> Vendor Hub
+                </Link>
+                <Link href="/lifestyle-hub" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-100 text-amber-900 font-bold text-xs">
+                  <Gift size={14} /> Lifestyle Hub
+                </Link>
+                <Link href="/driver-portal" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-emerald-400 font-bold text-xs">
+                  <Truck size={14} /> Driver
+                </Link>
+              </div>
+
+              <div className="pt-2">
+                <Button asChild className="w-full bg-[#41210a] hover:bg-[#2a1606] text-white rounded-xl py-3 font-bold text-xs shadow-md">
+                  <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>ENQUIRE</Link>
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       {/* Slide-Over Itinerary Cart Drawer */}
