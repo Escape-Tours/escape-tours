@@ -9,7 +9,7 @@ import { SlideTrigger } from '@/components/ui/SlideTrigger';
 import { ItineraryBuilder } from './ItineraryCategoryExplorer';
 import DayCard from '@/components/itinerary/DayCard';
 import AIAssistantDrawer from '@/components/itinerary/AIAssistantDrawer';
-import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, ShieldCheck, Download } from 'lucide-react';
+import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, ShieldCheck, Download, Menu, X, SlidersHorizontal } from 'lucide-react';
 import { saveItinerary } from '@/lib/services/itineraryService';
 import { validatePayload } from '@/lib/services/stagingValidator';
 import { Day, ItineraryItem } from '@/lib/types/itinerary-types';
@@ -44,6 +44,8 @@ export const SafariStudio = () => {
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'timeline' | 'map' | 'catalog'>('timeline');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
   const [pdfStatus, setPdfStatus] = useState<'idle' | 'generating' | 'success'>('idle');
   const [guests, setGuests] = useState({ adults: 1, children: 0 });
@@ -58,8 +60,6 @@ export const SafariStudio = () => {
         setDays([]); 
       } else {
         setIsAuthenticated(true);
-        // Fix Supabase TS overload by casting or querying the dynamic table safely if needed, 
-        // or ensuring table name matches typed schema. Using any/explicit cast to fix the overload issue.
         const { data: profile } = await (supabase
           .from('profiles' as any) as any)
           .select('*')
@@ -212,7 +212,6 @@ export const SafariStudio = () => {
       };
 
       await html2pdf().from(element).set(options).save();
-      
       setPdfStatus('success');
       setTimeout(() => setPdfStatus('idle'), 2500);
     } catch (err) {
@@ -253,21 +252,60 @@ export const SafariStudio = () => {
   }
 
   return (
-    <div className="relative flex w-full h-screen overflow-hidden bg-slate-950 font-sans selection:bg-amber-500 selection:text-slate-950">
+    <div className="relative flex flex-col lg:flex-row w-full h-screen overflow-hidden bg-slate-950 font-sans selection:bg-amber-500 selection:text-slate-950">
       
       {aiActivityNotice && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border border-amber-400 text-amber-300 text-xs font-black px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top duration-300">
-          <Sparkles size={16} className="animate-spin text-amber-400" />
-          <span>{aiActivityNotice}</span>
+        <div className="absolute top-4 left-4 right-4 lg:left-1/2 lg:-translate-x-1/2 z-50 bg-slate-900 border border-amber-400 text-amber-300 text-xs font-black px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top duration-300">
+          <Sparkles size={16} className="animate-spin text-amber-400 shrink-0" />
+          <span className="truncate">{aiActivityNotice}</span>
         </div>
       )}
 
-      <div className="absolute inset-0 z-0">
+      {/* Map Background for Desktop / Mobile View Layer */}
+      <div className={`absolute inset-0 z-0 ${mobileActiveTab === 'map' ? 'block' : 'hidden lg:block'}`}>
         <ItineraryMapOverlay locations={mapLocations} />
       </div>
 
-      <aside className={`relative h-full p-5 z-25 transition-all duration-700 ease-in-out ${isBrowsing ? 'w-[680px]' : 'w-[740px]'}`}>
-        <div ref={printRef} className={`h-full ${containerTheme.base} rounded-[2.5rem] border shadow-2xl p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="lg:hidden absolute bottom-0 left-0 right-0 z-40 bg-slate-900/90 backdrop-blur-lg border-t border-white/10 px-4 py-3 flex items-center justify-around">
+        <button 
+          onClick={() => setMobileActiveTab('timeline')}
+          className={`flex flex-col items-center gap-1 ${mobileActiveTab === 'timeline' ? 'text-amber-400' : 'text-slate-400'}`}
+        >
+          <Layers size={20} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Timeline</span>
+        </button>
+        <button 
+          onClick={() => setMobileActiveTab('map')}
+          className={`flex flex-col items-center gap-1 ${mobileActiveTab === 'map' ? 'text-amber-400' : 'text-slate-400'}`}
+        >
+          <MapPin size={20} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Map</span>
+        </button>
+        <button 
+          onClick={() => setMobileActiveTab('catalog')}
+          className={`flex flex-col items-center gap-1 ${mobileActiveTab === 'catalog' ? 'text-amber-400' : 'text-slate-400'}`}
+        >
+          <Compass size={20} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Catalog</span>
+        </button>
+        <button 
+          onClick={() => setIsCartModalOpen(true)}
+          className="flex flex-col items-center gap-1 text-slate-400 relative"
+        >
+          <ShoppingCart size={20} />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Cart</span>
+          {allItineraryItems.length > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] flex items-center justify-center">
+              {allItineraryItems.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Main Studio Sidebar / Timeline Container */}
+      <aside className={`relative h-full p-3 sm:p-5 z-20 transition-all duration-700 ease-in-out w-full lg:w-[740px] ${mobileActiveTab === 'timeline' ? 'flex' : 'hidden lg:flex'} flex-col pb-20 lg:pb-5`}>
+        <div ref={printRef} className={`h-full ${containerTheme.base} rounded-[2rem] sm:rounded-[2.5rem] border shadow-2xl p-4 sm:p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
           
           {!isAuthenticated && (
             <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
@@ -286,44 +324,44 @@ export const SafariStudio = () => {
             </div>
           )}
 
-          <div className="flex justify-between items-center mb-5 pb-4 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              <div className={`w-11 h-11 rounded-2xl ${containerTheme.glow} border flex items-center justify-center ${containerTheme.accent}`}>
-                <Compass size={22} className="animate-spin-slow" />
+          <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-2xl ${containerTheme.glow} border flex items-center justify-center ${containerTheme.accent}`}>
+                <Compass size={20} className="animate-spin-slow" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] tracking-widest font-black uppercase px-2 py-0.5 rounded-md border ${containerTheme.badge}`}>Studio Master Blueprint</span>
+                  <span className={`text-[9px] sm:text-[10px] tracking-widest font-black uppercase px-2 py-0.5 rounded-md border ${containerTheme.badge}`}>Studio Master Blueprint</span>
                 </div>
-                <h1 className="text-2xl font-black text-white tracking-tight mt-0.5">Safari Odyssey</h1>
+                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-0.5">Safari Odyssey</h1>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 no-print">
+            <div className="flex items-center gap-1.5 sm:gap-2 no-print">
               <button
                 type="button"
                 onClick={handleExportPDF}
                 disabled={pdfStatus === 'generating'}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
                   pdfStatus === 'success'
                     ? 'bg-emerald-500 text-slate-950 shadow-lg'
                     : 'bg-white/10 hover:bg-white/20 text-slate-300'
                 }`}
                 title="Download Professional Itinerary PDF"
               >
-                {pdfStatus === 'generating' && <Loader2 size={15} className="animate-spin text-amber-400" />}
-                {pdfStatus === 'success' && <CheckCircle2 size={15} />}
-                {pdfStatus === 'idle' && <Download size={15} />}
-                <span>{pdfStatus === 'generating' ? 'Exporting...' : pdfStatus === 'success' ? 'Downloaded!' : 'PDF'}</span>
+                {pdfStatus === 'generating' && <Loader2 size={14} className="animate-spin text-amber-400" />}
+                {pdfStatus === 'success' && <CheckCircle2 size={14} />}
+                {pdfStatus === 'idle' && <Download size={14} />}
+                <span className="hidden sm:inline">{pdfStatus === 'generating' ? 'Exporting...' : pdfStatus === 'success' ? 'Downloaded!' : 'PDF'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleShareLink}
-                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer relative"
+                className="p-2 sm:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer relative"
                 title="Share Itinerary Link"
               >
-                <Share2 size={15} />
+                <Share2 size={14} />
                 {shareCopied && (
                   <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
                     Copied Link!
@@ -334,14 +372,14 @@ export const SafariStudio = () => {
               <button 
                 type="button"
                 onClick={() => setIsAiOpen(true)}
-                className="group relative flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-900 border border-amber-400/50 text-amber-300 font-black text-xs tracking-wider uppercase hover:border-amber-400 transition-all shadow-lg hover:scale-105 cursor-pointer"
+                className="group relative flex items-center gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-amber-400/50 text-amber-300 font-black text-xs tracking-wider uppercase hover:border-amber-400 transition-all shadow-lg hover:scale-105 cursor-pointer"
                 title="Awaken AI Architect"
               >
                 <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                 </span>
-                <Bot size={15} className="text-amber-400 group-hover:rotate-12 transition-transform" />
+                <Bot size={14} className="text-amber-400 group-hover:rotate-12 transition-transform" />
                 <span className="hidden sm:inline text-amber-300">AI</span>
               </button>
 
@@ -349,7 +387,7 @@ export const SafariStudio = () => {
                 type="button"
                 onClick={handleSave}
                 disabled={saveStatus === 'saving'}
-                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
                   saveStatus === 'success' 
                     ? 'bg-emerald-500 text-slate-950 shadow-lg' 
                     : 'bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-lg'
@@ -413,7 +451,8 @@ export const SafariStudio = () => {
         </div>
       </aside>
 
-      <div className="flex-1 flex items-center justify-center z-20 pointer-events-none">
+      {/* Desktop Slide Trigger Button */}
+      <div className="hidden lg:flex flex-1 items-center justify-center z-20 pointer-events-none">
         {!isBrowsing && isAuthenticated && (
           <div className="pointer-events-auto animate-bounce-subtle">
             <SlideTrigger onOpen={() => setIsBrowsing(true)} />
@@ -421,27 +460,32 @@ export const SafariStudio = () => {
         )}
       </div>
 
-      {isBrowsing && isAuthenticated && (
-        <aside className="w-[420px] h-full bg-slate-950 backdrop-blur-2xl shadow-2xl z-30 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col">
-          <div className="flex p-5 border-b border-white/10 justify-between items-center bg-slate-900">
+      {/* Experience Catalog Drawer (Desktop & Mobile) */}
+      {(isBrowsing || mobileActiveTab === 'catalog') && isAuthenticated && (
+        <aside className={`w-full lg:w-[420px] h-full bg-slate-950 backdrop-blur-2xl shadow-2xl z-30 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col absolute lg:relative inset-0 ${mobileActiveTab === 'catalog' ? 'flex' : 'hidden lg:flex'}`}>
+          <div className="flex p-4 sm:p-5 border-b border-white/10 justify-between items-center bg-slate-900">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-amber-400" />
               <span className="text-xs font-black tracking-widest text-white uppercase">Experience Catalog ({residencyTier})</span>
             </div>
             <button 
               type="button"
-              onClick={() => setIsBrowsing(false)} 
+              onClick={() => {
+                setIsBrowsing(false);
+                setMobileActiveTab('timeline');
+              }} 
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[10px] tracking-wider uppercase transition-colors cursor-pointer"
             >
               Close Drawer
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 overflow-y-auto custom-scrollbar pb-20 lg:pb-0">
             <ItineraryBuilder residencyTier={residencyTier} />
           </div>
         </aside>
       )}
 
+      {/* Cart Modal */}
       {isCartModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-slate-900 border border-amber-500/30 w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -463,140 +507,140 @@ export const SafariStudio = () => {
               >
                 Close
               </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-            <div className="bg-slate-950 p-4 rounded-2xl border border-white/10 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-amber-400" />
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Residency Tariff Tier</span>
-                </div>
-                <div className="px-3 py-1 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-black uppercase tracking-wider">
-                  {residencyTier} (Profile Locked)
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-white/5">
-                <div className="flex items-center gap-2">
-                  <Users size={16} className="text-amber-400" />
-                  <span className="text-xs font-bold text-slate-300">Guests Count</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Adults</span>
-                    <button 
-                      type="button"
-                      onClick={() => setGuests(prev => ({ ...prev, adults: Math.max(1, prev.adults - 1) }))}
-                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
-                    >-</button>
-                    <span className="text-xs font-black text-white w-4 text-center">{guests.adults}</span>
-                    <button 
-                      type="button"
-                      onClick={() => setGuests(prev => ({ ...prev, adults: prev.adults + 1 }))}
-                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
-                    >+</button>
-                  </div>
-
-                  <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Kids</span>
-                    <button 
-                      type="button"
-                      onClick={() => setGuests(prev => ({ ...prev, children: Math.max(0, prev.children - 1) }))}
-                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
-                    >-</button>
-                    <span className="text-xs font-black text-white w-4 text-center">{guests.children}</span>
-                    <button 
-                      type="button"
-                      onClick={() => setGuests(prev => ({ ...prev, children: prev.children + 1 }))}
-                      className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
-                    >+</button>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {allItineraryItems.length === 0 ? (
-              <div className="text-center py-12">
-                <ShoppingCart size={40} className="mx-auto text-slate-600 mb-3" />
-                <p className="text-sm font-bold text-slate-400">Your cart is currently empty.</p>
-                <p className="text-xs text-slate-500 mt-1">Add experiences from the catalog or awaken the AI Architect to populate your trip.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {allItineraryItems.map((slot, idx) => {
-                  const item = slot.item;
-                  let activeRate = item.price ?? item.base_price ?? 150;
-                  if (residencyTier === 'RESIDENT' && item.resident_price) {
-                    activeRate = item.resident_price;
-                  } else if (residencyTier === 'CITIZEN' && item.ea_price) {
-                    activeRate = item.ea_price;
-                  }
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+              <div className="bg-slate-950 p-4 rounded-2xl border border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-amber-400" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-300">Residency Tariff Tier</span>
+                  </div>
+                  <div className="px-3 py-1 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                    {residencyTier} (Profile Locked)
+                  </div>
+                </div>
 
-                  return (
-                    <div key={idx} className="bg-slate-950 border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4">
-                      <div className="overflow-hidden">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">Day {slot.dayNumber} - {slot.type}</span>
-                        </div>
-                        <h4 className="text-sm font-black text-white truncate">{item.name}</h4>
-                        <p className="text-xs text-slate-400 truncate mt-0.5">{item.location_name || 'Tanzania Safari Circuit'}</p>
-                      </div>
-
-                      <div className="flex items-center gap-4 shrink-0">
-                        <div className="text-right">
-                          <span className="text-sm font-black text-amber-400">${activeRate}</span>
-                          <span className="text-[10px] text-slate-500 block">per person ({residencyTier.toLowerCase()})</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const parentDay = days.find(d => d.day_number === slot.dayNumber);
-                            if (parentDay) handleRemoveItem(parentDay.id, slot.id);
-                          }}
-                          className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-colors cursor-pointer"
-                          title="Remove item"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-amber-400" />
+                    <span className="text-xs font-bold text-slate-300">Guests Count</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Adults</span>
+                      <button 
+                        type="button"
+                        onClick={() => setGuests(prev => ({ ...prev, adults: Math.max(1, prev.adults - 1) }))}
+                        className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                      >-</button>
+                      <span className="text-xs font-black text-white w-4 text-center">{guests.adults}</span>
+                      <button 
+                        type="button"
+                        onClick={() => setGuests(prev => ({ ...prev, adults: prev.adults + 1 }))}
+                        className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                      >+</button>
                     </div>
-                  );
-                })}
+
+                    <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-white/10">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Kids</span>
+                      <button 
+                        type="button"
+                        onClick={() => setGuests(prev => ({ ...prev, children: Math.max(0, prev.children - 1) }))}
+                        className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                      >-</button>
+                      <span className="text-xs font-black text-white w-4 text-center">{guests.children}</span>
+                      <button 
+                        type="button"
+                        onClick={() => setGuests(prev => ({ ...prev, children: prev.children + 1 }))}
+                        className="w-5 h-5 rounded bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                      >+</button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
 
-          <div className="p-6 border-t border-white/10 bg-slate-950 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Estimated Total Quote</span>
-              <span className="text-2xl font-black text-white flex items-center gap-0.5">
-                <DollarSign size={20} className="text-amber-400" />
-                {estimatedTotal.toLocaleString()}
-              </span>
+              {allItineraryItems.length === 0 ? (
+                <div className="text-center py-12">
+                  <ShoppingCart size={40} className="mx-auto text-slate-600 mb-3" />
+                  <p className="text-sm font-bold text-slate-400">Your cart is currently empty.</p>
+                  <p className="text-xs text-slate-500 mt-1">Add experiences from the catalog or awaken the AI Architect to populate your trip.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {allItineraryItems.map((slot, idx) => {
+                    const item = slot.item;
+                    let activeRate = item.price ?? item.base_price ?? 150;
+                    if (residencyTier === 'RESIDENT' && item.resident_price) {
+                      activeRate = item.resident_price;
+                    } else if (residencyTier === 'CITIZEN' && item.ea_price) {
+                      activeRate = item.ea_price;
+                    }
+
+                    return (
+                      <div key={idx} className="bg-slate-950 border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4">
+                        <div className="overflow-hidden">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">Day {slot.dayNumber} - {slot.type}</span>
+                          </div>
+                          <h4 className="text-sm font-black text-white truncate">{item.name}</h4>
+                          <p className="text-xs text-slate-400 truncate mt-0.5">{item.location_name || 'Tanzania Safari Circuit'}</p>
+                        </div>
+
+                        <div className="flex items-center gap-4 shrink-0">
+                          <div className="text-right">
+                            <span className="text-sm font-black text-amber-400">${activeRate}</span>
+                            <span className="text-[10px] text-slate-500 block">per person ({residencyTier.toLowerCase()})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const parentDay = days.find(d => d.day_number === slot.dayNumber);
+                              if (parentDay) handleRemoveItem(parentDay.id, slot.id);
+                            }}
+                            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-colors cursor-pointer"
+                            title="Remove item"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setIsCartModalOpen(false);
-                handleSave();
-              }}
-            className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
-          >
-            Secure & Save Itinerary
-          </button>
-          </div>
-      </div>
-    </div>
-  )}
 
-  {isAuthenticated && (
-    <AIAssistantDrawer 
-      isOpen={isAiOpen} 
-      onClose={() => setIsAiOpen(false)} 
-      onApplyItinerary={handleApplyItinerary} 
-    />
-  )}
+            <div className="p-6 border-t border-white/10 bg-slate-950 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Estimated Total Quote</span>
+                <span className="text-2xl font-black text-white flex items-center gap-0.5">
+                  <DollarSign size={20} className="text-amber-400" />
+                  {estimatedTotal.toLocaleString()}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCartModalOpen(false);
+                  handleSave();
+                }}
+              className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
+            >
+              Secure & Save Itinerary
+            </button>
+            </div>
+        </div>
+      </div>
+    )}
+
+    {isAuthenticated && (
+      <AIAssistantDrawer 
+        isOpen={isAiOpen} 
+        onClose={() => setIsAiOpen(false)} 
+        onApplyItinerary={handleApplyItinerary} 
+      />
+    )}
     </div>
   );
 };
