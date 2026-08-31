@@ -3,8 +3,8 @@ import { FeeLineItem, CalculationOptions } from '@/lib/types/TariffParkFees';
 import Decimal from 'decimal.js';
 
 export class ParkPricingStrategy implements PricingStrategy {
-  calculate(item: any, options: CalculationOptions): FeeLineItem {
-    const priceData = item.price;
+  public calculate(item: any, options: CalculationOptions): FeeLineItem {
+    const priceData = item.price || item.pricing;
     const tier = options.tier || 'INTERNATIONAL';
     const duration = new Decimal(options.duration || 1);
     
@@ -12,31 +12,26 @@ export class ParkPricingStrategy implements PricingStrategy {
       return this.fallbackFee(item);
     }
 
-    // 1. Resolve rates with safe defaults
     const rawRate = priceData.entry_fee 
-      ? (priceData.entry_fee[tier] || 0) 
-      : (priceData[tier] || 0);
+      ? this.resolvePrice(priceData.entry_fee, tier) 
+      : this.resolvePrice(priceData, tier);
 
     const baseRatePerAdult = new Decimal(rawRate);
     
-    // 2. Business Logic: Child rate handling
-    // Check if item metadata defines a specific child_rate_multiplier
     const childMultiplier = item.metadata?.child_rate_multiplier 
       ? new Decimal(item.metadata.child_rate_multiplier) 
       : new Decimal(0.5); 
 
     const childRate = baseRatePerAdult.mul(childMultiplier);
 
-    // 3. Calculation with high precision
-    const totalAdultCost = baseRatePerAdult.mul(options.adults);
-    const totalChildCost = childRate.mul(options.children);
+    const totalAdultCost = baseRatePerAdult.mul(options.adults || 1);
+    const totalChildCost = childRate.mul(options.children || 0);
     
-    // Total = (Adults + Children) * Days/Nights
     const subtotalBase = totalAdultCost.add(totalChildCost).mul(duration);
 
     return {
       label: item.name || "Park Entry",
-      description: `${options.adults} Adults, ${options.children} Children for ${duration.toNumber()} day(s)`,
+      description: `${options.adults || 1} Adults, ${options.children || 0} Children for ${duration.toNumber()} day(s)`,
       currency: item.currency || 'USD',
       subtotalBase: subtotalBase.toNumber(),
       taxAmount: 0, 
@@ -50,6 +45,46 @@ export class ParkPricingStrategy implements PricingStrategy {
         calculatedAt: new Date().toISOString()
       }
     };
+  }
+
+  private resolvePrice(priceData: any, tier: string): number {
+    if (!priceData) return 0;
+    
+    if (typeof priceData === 'number') return priceData;
+    if (typeof priceData === 'string' && !isNaN(Number(priceData))) return Number(priceData);
+
+    const t = (tier || 'INTERNATIONAL').toLowerCase();
+    
+    const keys: string[] = [
+      t,
+      t.toLowerCase(),
+      t.toUpperCase(),
+    ];
+
+    if (t.includes('citizen') || t === 'local' || t === 'tz') {
+      keys.push('citizen', 'tanzanian_citizen', 'tz_citizen', 'local', 'east_african');
+    } else if (t.includes('resident') && !t.includes('non')) {
+      keys.push('resident', 'expat_resident', 'foreign_resident', 'tanzanian_resident');
+    } else {
+      keys.push('international', 'non_resident', 'foreign', 'non_res');
+    }
+
+    for (const key of keys) {
+      if (priceData[key] !== undefined && priceData[key] !== null) {
+        const val = Number(priceData[key]);
+        if (!isNaN(val)) return val;
+      }
+    }
+
+    for (const val of Object.values(priceData)) {
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      if (typeof val === 'object' && val !== null) {
+        const nestedVal = this.resolvePrice(val, tier);
+        if (nestedVal > 0) return nestedVal;
+      }
+    }
+
+    return 0;
   }
 
   private fallbackFee(item: any): FeeLineItem {

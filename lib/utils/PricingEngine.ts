@@ -31,28 +31,71 @@ export class PricingEngine {
             return this.defaultCalculation(item, options);
         }
 
-        return strategy.calculate(item, options);
+        try {
+            return strategy.calculate(item, options);
+        } catch (err) {
+            console.warn(`[PricingEngine] Strategy failed for ${item.type}, falling back to default calculation:`, err);
+            return this.defaultCalculation(item, options);
+        }
+    }
+
+    private static resolvePrice(priceData: any, tier: string): number {
+        if (!priceData) return 0;
+        
+        if (typeof priceData === 'number') return priceData;
+        if (typeof priceData === 'string' && !isNaN(Number(priceData))) return Number(priceData);
+
+        const t = (tier || 'INTERNATIONAL').toLowerCase();
+        
+        const keys: string[] = [
+            t,
+            t.toLowerCase(),
+            t.toUpperCase(),
+        ];
+
+        if (t.includes('citizen') || t === 'local' || t === 'tz') {
+            keys.push('citizen', 'tanzanian_citizen', 'tz_citizen', 'local');
+        } else if (t.includes('resident') && !t.includes('non')) {
+            keys.push('resident', 'expat_resident', 'foreign_resident', 'tanzanian_resident');
+        } else {
+            keys.push('international', 'non_resident', 'foreign', 'non_res');
+        }
+
+        for (const key of keys) {
+            if (priceData[key] !== undefined && priceData[key] !== null) {
+                const val = Number(priceData[key]);
+                if (!isNaN(val)) return val;
+            }
+        }
+
+        for (const val of Object.values(priceData)) {
+            if (typeof val === 'number' && !isNaN(val)) return val;
+            if (typeof val === 'object' && val !== null) {
+                const nestedVal = this.resolvePrice(val, tier);
+                if (nestedVal > 0) return nestedVal;
+            }
+        }
+
+        return 0;
     }
 
     private static defaultCalculation(item: any, options: CalculationOptions): FeeLineItem {
         const tier = options.tier || 'INTERNATIONAL';
-        const priceData = item.price || {};
+        const priceData = item.price || item.pricing || {};
 
-        // 1. Resolve Price
         let resolvedPrice = 0;
         if (priceData.entry_fee) {
-            resolvedPrice = priceData.entry_fee[tier] || 0;
+            resolvedPrice = this.resolvePrice(priceData.entry_fee, tier);
         } else if (priceData.concession_fee) {
-            resolvedPrice = priceData.concession_fee[tier] || 0;
+            resolvedPrice = this.resolvePrice(priceData.concession_fee, tier);
         } else {
-            resolvedPrice = priceData[tier] || 0;
+            resolvedPrice = this.resolvePrice(priceData, tier);
         }
         
         const unitPrice = new Decimal(resolvedPrice);
-        const guestCount = new Decimal(options.adults + options.children || 1);
+        const guestCount = new Decimal((options.adults || 1) + (options.children || 0));
         const total = unitPrice.mul(guestCount);
         
-        // 2. Default Tax Logic (Example: 0 for generic items)
         const vatAmount = new Decimal(0);
         
         return {
@@ -68,7 +111,8 @@ export class PricingEngine {
                 vat: vatAmount.toNumber(),
                 strategy: 'DEFAULT_RESOLVER',
                 itemId: item.id || 'N/A',
-                guestCount: guestCount.toNumber()
+                guestCount: guestCount.toNumber(),
+                tierUsed: tier
             }
         };
     }

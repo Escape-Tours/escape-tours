@@ -6,7 +6,8 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { SlideTrigger } from '@/components/ui/SlideTrigger';
-import { ItineraryBuilder } from './ItineraryCategoryExplorer';
+import { useItineraryStore } from 'store/useItineraryStore';
+import ItineraryCategoryExplorer from './ItineraryCategoryExplorer';
 import DayCard from '@/components/itinerary/DayCard';
 import AIAssistantDrawer from '@/components/itinerary/AIAssistantDrawer';
 import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, DollarSign, Users, Trash2, Share2, ShieldCheck, Download, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -21,11 +22,30 @@ const ItineraryMapOverlay = dynamic(() => import('@/components/itinerary/Itinera
   loading: () => <div className="w-full h-full bg-slate-950 animate-pulse rounded-3xl" />
 });
 
+const getBaseRateForTier = (item: ItineraryItem | null, tier: ResidencyTier): number => {
+  if (!item) return 0;
+  
+  let val: any = null;
+  if (tier === 'CITIZEN') {
+    val = (item as any).citizen_price ?? (item as any).ea_price ?? (item as any).local_price ?? item.price ?? item.base_price;
+  } else if (tier === 'RESIDENT') {
+    val = (item as any).resident_price ?? item.price ?? item.base_price;
+  } else {
+    val = (item as any).international_price ?? item.price ?? item.base_price;
+  }
+  
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
 export const SafariStudio = () => {
   const router = useRouter();
   const printRef = useRef<HTMLDivElement>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const addItemToStore = useItineraryStore((state) => state.addItem);
+  const removeItemFromStore = useItineraryStore((state) => state.removeItem);
 
   const [days, setDays] = useState<Day[]>([
     { 
@@ -84,15 +104,7 @@ export const SafariStudio = () => {
     const totalChildren = Math.max(0, guests.children);
     
     return allItineraryItems.reduce((sum, slot) => {
-      const item = slot.item;
-      let baseRate = item.price ?? item.base_price ?? 150; 
-      
-      if (residencyTier === 'RESIDENT' && item.resident_price) {
-        baseRate = item.resident_price;
-      } else if (residencyTier === 'CITIZEN' && item.ea_price) {
-        baseRate = item.ea_price;
-      }
-
+      const baseRate = getBaseRateForTier(slot.item, residencyTier);
       const adultCost = baseRate * totalAdults;
       const childCost = (baseRate * 0.5) * totalChildren; 
       return sum + adultCost + childCost;
@@ -137,7 +149,81 @@ export const SafariStudio = () => {
     }));
   };
 
+  const handleAddItemDirectly = (item: ItineraryItem) => {
+    if (!isAuthenticated) return;
+    
+    let targetDayId: string | null = null;
+    let targetSlotId: string | null = null;
+    let targetSlotType: 'MORNING' | 'AFTERNOON' | 'EVENING' = 'MORNING';
+    let targetDayNumber = 1;
+
+    for (const day of days) {
+      const emptySlot = day.slots.find(s => s.item === null);
+      if (emptySlot) {
+        targetDayId = day.id;
+        targetSlotId = emptySlot.id;
+        targetSlotType = emptySlot.type as any;
+        targetDayNumber = day.day_number;
+        break;
+      }
+    }
+
+    const baseRate = getBaseRateForTier(item, residencyTier);
+
+    if (!targetDayId || !targetSlotId) {
+      const newDayId = crypto.randomUUID();
+      const newSlotId = crypto.randomUUID();
+      targetDayNumber = days.length + 1;
+      targetSlotType = 'MORNING';
+
+      setDays(prevDays => [
+        ...prevDays,
+        {
+          id: newDayId,
+          day_number: targetDayNumber,
+          location: item.location_name || 'Exploration Stop',
+          slots: [
+            { id: newSlotId, type: 'MORNING', item, name: item.name, location: { lat: item.lat, lng: item.lng } },
+            { id: crypto.randomUUID(), type: 'AFTERNOON', item: null, name: null, location: { lat: null, lng: null } },
+            { id: crypto.randomUUID(), type: 'EVENING', item: null, name: null, location: { lat: null, lng: null } }
+          ]
+        }
+      ]);
+
+      addItemToStore({
+        ...item,
+        id: item.id,
+        originalId: item.id,
+        price: baseRate,
+        slotId: newSlotId,
+        timeSlot: 'MORNING',
+      } as any, targetDayNumber, 'MORNING');
+
+      setAiActivityNotice(`✨ Added ${item.name} to Day ${targetDayNumber} (New Day Created)`);
+      setTimeout(() => setAiActivityNotice(null), 3000);
+      return;
+    }
+
+    // Fix: Explicitly update state so DayCard components render the added item immediately
+    handleMoveItem(targetDayId, targetSlotId, item);
+
+    addItemToStore({
+      ...item,
+      id: item.id,
+      originalId: item.id,
+      price: baseRate,
+      slotId: targetSlotId,
+      timeSlot: targetSlotType,
+    } as any, targetDayNumber, targetSlotType);
+
+    setAiActivityNotice(`✨ Added ${item.name} to itinerary timeline!`);
+    setTimeout(() => setAiActivityNotice(null), 3000);
+  };
+
   const handleRemoveItem = (dayId: string, slotId: string) => {
+    const targetDay = days.find(d => d.id === dayId);
+    const targetSlot = targetDay?.slots.find(s => s.id === slotId);
+
     setDays(prevDays => prevDays.map(d => {
       if (d.id !== dayId) return d;
       return { 
@@ -145,10 +231,22 @@ export const SafariStudio = () => {
         slots: d.slots.map(s => s.id === slotId ? { ...s, item: null, name: null, location: { lat: null, lng: null } } : s) 
       };
     }));
+
+    if (targetSlot?.item?.id) {
+      removeItemFromStore(targetSlot.item.id);
+    }
   };
 
   const handleDeleteDay = (dayId: string) => {
     if (days.length <= 1) return;
+    const dayToDelete = days.find(d => d.id === dayId);
+    if (dayToDelete) {
+      dayToDelete.slots.forEach(slot => {
+        if (slot.item?.id) {
+          removeItemFromStore(slot.item.id);
+        }
+      });
+    }
     setDays(prevDays => prevDays.filter(d => d.id !== dayId).map((d, index) => ({ ...d, day_number: index + 1 })));
   };
 
@@ -261,14 +359,13 @@ export const SafariStudio = () => {
         </div>
       )}
 
-      {/* Map Background Layer */}
       <div className={`absolute inset-0 z-0 ${mobileActiveTab === 'map' ? 'block' : 'hidden lg:block'}`}>
         <ItineraryMapOverlay locations={mapLocations} />
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
       <div className="lg:hidden absolute bottom-0 left-0 right-0 z-40 bg-slate-900/90 backdrop-blur-lg border-t border-white/10 px-4 py-3 flex items-center justify-around">
         <button 
+          type="button"
           onClick={() => setMobileActiveTab('timeline')}
           className={`flex flex-col items-center gap-1 ${mobileActiveTab === 'timeline' ? 'text-amber-400' : 'text-slate-400'}`}
         >
@@ -276,6 +373,7 @@ export const SafariStudio = () => {
           <span className="text-[10px] font-bold uppercase tracking-wider">Timeline</span>
         </button>
         <button 
+          type="button"
           onClick={() => setMobileActiveTab('map')}
           className={`flex flex-col items-center gap-1 ${mobileActiveTab === 'map' ? 'text-amber-400' : 'text-slate-400'}`}
         >
@@ -283,6 +381,7 @@ export const SafariStudio = () => {
           <span className="text-[10px] font-bold uppercase tracking-wider">Map</span>
         </button>
         <button 
+          type="button"
           onClick={() => setMobileActiveTab('catalog')}
           className={`flex flex-col items-center gap-1 ${mobileActiveTab === 'catalog' ? 'text-amber-400' : 'text-slate-400'}`}
         >
@@ -290,6 +389,7 @@ export const SafariStudio = () => {
           <span className="text-[10px] font-bold uppercase tracking-wider">Catalog</span>
         </button>
         <button 
+          type="button"
           onClick={() => setIsCartModalOpen(true)}
           className="flex flex-col items-center gap-1 text-slate-400 relative"
         >
@@ -303,9 +403,7 @@ export const SafariStudio = () => {
         </button>
       </div>
 
-      {/* Left Collapsible Studio Drawer + Slide Trigger */}
       <div className="relative z-20 flex h-full items-center">
-        {/* Slide Trigger for Studio when closed */}
         {!isStudioOpen && isAuthenticated && (
           <button
             type="button"
@@ -318,7 +416,6 @@ export const SafariStudio = () => {
           </button>
         )}
 
-        {/* Main Studio Sidebar / Timeline Container */}
         <aside className={`relative h-full p-3 sm:p-5 transition-all duration-500 ease-in-out w-full lg:w-[740px] ${isStudioOpen ? 'translate-x-0 opacity-100 flex' : '-translate-x-full opacity-0 absolute pointer-events-none'} ${mobileActiveTab === 'timeline' ? 'flex' : 'hidden lg:flex'} flex-col pb-20 lg:pb-5`}>
           <div ref={printRef} className={`h-full ${containerTheme.base} rounded-[2rem] sm:rounded-[2.5rem] border shadow-2xl p-4 sm:p-7 flex flex-col overflow-hidden transition-all duration-700 relative bg-slate-950`}>
             
@@ -386,6 +483,21 @@ export const SafariStudio = () => {
 
                 <button 
                   type="button"
+                  onClick={() => setIsCartModalOpen(true)}
+                  className="group relative flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-amber-400/40 text-amber-300 font-black text-xs tracking-wider uppercase hover:border-amber-400 transition-all shadow-lg hover:scale-105 cursor-pointer"
+                  title="Open Itinerary Cart & Pricing Manifest"
+                >
+                  <ShoppingCart size={14} className="text-amber-400 group-hover:scale-110 transition-transform" />
+                  <span className="hidden sm:inline">Cart</span>
+                  {allItineraryItems.length > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] flex items-center justify-center shadow">
+                      {allItineraryItems.length}
+                    </span>
+                  )}
+                </button>
+
+                <button 
+                  type="button"
                   onClick={() => setIsAiOpen(true)}
                   className="group relative flex items-center gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-amber-400/50 text-amber-300 font-black text-xs tracking-wider uppercase hover:border-amber-400 transition-all shadow-lg hover:scale-105 cursor-pointer"
                   title="Awaken AI Architect"
@@ -447,7 +559,6 @@ export const SafariStudio = () => {
               </div>
             </div>
 
-            {/* Day Cards List Container */}
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar bg-slate-950 mb-4">
               {days.map((day) => (
                 <DayCard 
@@ -476,12 +587,9 @@ export const SafariStudio = () => {
         </aside>
       </div>
 
-      {/* Center Spacer over map */}
       <div className="hidden lg:flex flex-1 pointer-events-none" />
 
-      {/* Right Collapsible Experience Catalog Drawer */}
       <div className="relative z-20 flex h-full items-center">
-        {/* Slide Trigger for Catalog when closed */}
         {!isCatalogOpen && isAuthenticated && (
           <button
             type="button"
@@ -511,13 +619,12 @@ export const SafariStudio = () => {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <ItineraryBuilder residencyTier={residencyTier} />
+              <ItineraryCategoryExplorer residencyTier={residencyTier} onSelectItem={handleAddItemDirectly} />
             </div>
           </aside>
         )}
       </div>
 
-      {/* Cart Modal */}
       {isCartModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-slate-900 border border-amber-500/30 w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -592,81 +699,65 @@ export const SafariStudio = () => {
                 </div>
               </div>
 
-              {allItineraryItems.length === 0 ? (
-                <div className="text-center py-12">
-                  <ShoppingCart size={40} className="mx-auto text-slate-600 mb-3" />
-                  <p className="text-sm font-bold text-slate-400">Your cart is currently empty.</p>
-                  <p className="text-xs text-slate-500 mt-1">Add experiences from the catalog or awaken the AI Architect to populate your trip.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {allItineraryItems.map((slot, idx) => {
-                    const item = slot.item;
-                    let activeRate = item.price ?? item.base_price ?? 150;
-                    if (residencyTier === 'RESIDENT' && item.resident_price) {
-                      activeRate = item.resident_price;
-                    } else if (residencyTier === 'CITIZEN' && item.ea_price) {
-                      activeRate = item.ea_price;
-                    }
-
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Selected Manifest Items ({allItineraryItems.length})</h4>
+                {allItineraryItems.length === 0 ? (
+                  <div className="text-center py-8 bg-slate-950 rounded-2xl border border-white/5">
+                    <p className="text-xs text-slate-500 font-medium">No experiences added to your timeline yet.</p>
+                  </div>
+                ) : (
+                  allItineraryItems.map((slot) => {
+                    const itemRate = getBaseRateForTier(slot.item, residencyTier);
+                    const itemTotal = (itemRate * Math.max(1, guests.adults)) + (itemRate * 0.5 * Math.max(0, guests.children));
                     return (
-                      <div key={idx} className="bg-slate-950 border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4">
-                        <div className="overflow-hidden">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">Day {slot.dayNumber} - {slot.type}</span>
-                          </div>
-                          <h4 className="text-sm font-black text-white truncate">{item.name}</h4>
-                          <p className="text-xs text-slate-400 truncate mt-0.5">{item.location_name || 'Tanzania Safari Circuit'}</p>
+                      <div key={slot.id} className="bg-slate-950 p-4 rounded-2xl border border-white/10 flex items-center justify-between gap-4">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-amber-400">Day {slot.dayNumber} - {slot.type}</span>
+                          <h5 className="text-sm font-bold text-white mt-0.5">{slot.item.name}</h5>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Rate: ${itemRate.toLocaleString()} / adult</p>
                         </div>
-
-                        <div className="flex items-center gap-4 shrink-0">
+                        <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <span className="text-sm font-black text-amber-400">${activeRate}</span>
-                            <span className="text-[10px] text-slate-500 block">per person ({residencyTier.toLowerCase()})</span>
+                            <span className="text-sm font-black text-amber-400">${itemTotal.toLocaleString()}</span>
+                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Est. Total</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => {
-                              const parentDay = days.find(d => d.day_number === slot.dayNumber);
-                              if (parentDay) handleRemoveItem(parentDay.id, slot.id);
+                              const dayToUpdate = days.find(d => d.day_number === slot.dayNumber);
+                              if (dayToUpdate) handleRemoveItem(dayToUpdate.id, slot.id);
                             }}
-                            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-colors cursor-pointer"
+                            className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
                             title="Remove item"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
+                  })
+                )}
+              </div>
             </div>
 
             <div className="p-6 border-t border-white/10 bg-slate-950 flex items-center justify-between">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Estimated Total Quote</span>
-                <span className="text-2xl font-black text-white flex items-center gap-0.5">
-                  <DollarSign size={20} className="text-amber-400" />
-                  {estimatedTotal.toLocaleString()}
-                </span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Estimated Quote</span>
+                <div className="text-2xl font-black text-amber-400">${estimatedTotal.toLocaleString()}</div>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setIsCartModalOpen(false);
-                  handleSave();
-                }}
-                className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer"
+                onClick={() => setIsCartModalOpen(false)}
+                className="px-6 py-3 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider hover:bg-amber-300 transition-all shadow-lg cursor-pointer"
               >
-                Secure & Save Itinerary
+                Confirm & Return to Studio
               </button>
             </div>
+
           </div>
         </div>
       )}
 
-      {/* AI Assistant Drawer */}
       <AIAssistantDrawer
         isOpen={isAiOpen}
         onClose={() => setIsAiOpen(false)}
