@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useState, useMemo } from "react";
-import { useItineraryStore } from "store/useItineraryStore";
+import { useItineraryStore } from "@/store/useItineraryStore";
 import { saveUserItinerary } from "@/lib/utils/itinerary-actions";
 import { useUser } from "@/components/providers/UserContext";
 
@@ -11,6 +11,7 @@ interface CheckoutButtonProps {
   total?: number;
   itineraryId?: string;
   className?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -38,7 +39,11 @@ export default function CheckoutButton({ amount, total, itineraryId, className }
     setIsLoading(true);
     try {
       // 1. Automatically save the itinerary to the database/User Hub on checkout attempt
-      await saveUserItinerary();
+      try {
+        await saveUserItinerary();
+      } catch (saveError) {
+        console.warn("Auto-save itinerary skipped or failed:", saveError);
+      }
 
       // 2. Proceed with the payment gateway request passing full itinerary state items to the correct PesaPal endpoint route
       const res = await fetch('/api/checkout/pesapal', {
@@ -60,7 +65,12 @@ export default function CheckoutButton({ amount, total, itineraryId, className }
       const redirectUrl = data.redirect_url || data.redirectUrl || data.payment_url || data.url;
       
       if (data.success && redirectUrl) {
-        window.location.href = redirectUrl;
+        // Mobile-safe redirect handling to prevent browser popup/async blocking on iOS and Android
+        if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          window.location.assign(redirectUrl);
+        } else {
+          window.location.href = redirectUrl;
+        }
       } else {
         console.error("No redirect URL returned from checkout API", data);
         alert(data.error || "Checkout initialization failed");

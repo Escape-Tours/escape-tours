@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, Trash2, ArrowRight, X, Sparkles } from 'lucide-react';
 import { useItineraryStore } from '@/store/useItineraryStore';
+import CheckoutButton from '@/components/itinerary/CheckoutButton';
 
 interface CartItem {
   id: string | number;
@@ -103,7 +104,7 @@ export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
           </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-slate-400 hover:text-white transition"
+            className="w-8 h-8 rounded-full bg-neutral-900 hover:bg-neutral-800 flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -142,7 +143,7 @@ export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
                 </div>
                 <button
                   onClick={() => removeItem(item.id || index)}
-                  className="w-8 h-8 rounded-xl bg-neutral-950 hover:bg-red-950/40 text-slate-500 hover:text-red-400 border border-neutral-800 flex items-center justify-center transition shrink-0"
+                  className="w-8 h-8 rounded-xl bg-neutral-950 hover:bg-red-950/40 text-slate-500 hover:text-red-400 border border-neutral-800 flex items-center justify-center transition shrink-0 cursor-pointer"
                   title="Remove item"
                 >
                   <Trash2 size={14} />
@@ -160,17 +161,23 @@ export default function ItineraryCart({ isOpen, onClose }: ItineraryCartProps) {
               <span className="text-lg font-black text-amber-400 font-mono">${totalPrice.toFixed(2)}</span>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <button
                 onClick={handleBuildFromCart}
-                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-xl transition text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 rounded-xl transition text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 cursor-pointer"
               >
                 <Sparkles size={16} /> Build Itinerary From Cart <ArrowRight size={14} />
               </button>
               
+              <CheckoutButton 
+                amount={totalPrice} 
+                itineraryId="pending-cart-id" 
+                className="w-full bg-neutral-900 hover:bg-neutral-800 text-amber-300 font-black py-3.5 rounded-xl transition text-xs uppercase tracking-wider border border-amber-500/40 flex items-center justify-center gap-2 cursor-pointer shadow-md" 
+              />
+
               <button
                 onClick={clearAll}
-                className="w-full bg-transparent hover:bg-neutral-900 text-red-400/80 hover:text-red-400 font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wider"
+                className="w-full bg-transparent hover:bg-neutral-900 text-red-400/80 hover:text-red-400 font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wider cursor-pointer"
               >
                 Clear All Items
               </button>
