@@ -4,12 +4,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useUser } from '@/components/providers/UserContext';
 import { createClient } from '@/lib/supabase/client';
-import { Search, Bed, Car, Mountain, MapPin, AlertCircle, Anchor, Compass, Loader2, Users, Minus, Plus, ShieldCheck, PlusCircle, MinusCircle, Calendar, Check, Crown } from 'lucide-react';
+import { Search, Bed, Car, Mountain, MapPin, AlertCircle, Anchor, Compass, Loader2, Users, Minus, Plus, ShieldCheck, Check, Crown, PlusCircle, MinusCircle, Calendar, ArrowRight } from 'lucide-react';
 import { getStandardizedPrice, ResidencyTier } from "@/lib/utils/price-translator";
 import { BuilderItem, ItineraryItem } from '@/lib/types/itinerary-types';
 import { mapDbItemsToBuilderItems } from '@/lib/utils/item-mapper';
-import CheckoutButton from '@/components/itinerary/CheckoutButton';
 import { useItineraryStore } from '@/store/useItineraryStore';
+import { saveUserItinerary } from '@/lib/utils/itinerary-actions';
+import { useRouter } from 'next/navigation';
 
 const CATEGORY_CONFIG = [
   { label: 'Lodges', dbType: 'lodges', icon: Bed },
@@ -55,13 +56,13 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, onQuickAdd, onQuickR
         draggable
         onDragStart={(e) => onDragStart(e, item, price)}
         onDragEnd={onDragEnd}
-        className={`group relative flex items-center justify-between p-3 sm:p-3.5 border rounded-2xl transition-all duration-300 cursor-grab active:cursor-grabbing bg-gradient-to-br from-stone-900/95 via-stone-950/98 to-zinc-950 backdrop-blur-2xl select-none shadow-lg
+        className={`group relative flex items-center justify-between p-2.5 sm:p-3 border rounded-2xl transition-all duration-300 cursor-grab active:cursor-grabbing bg-gradient-to-br from-stone-900/95 via-stone-950/98 to-zinc-950 backdrop-blur-2xl select-none shadow-lg
           ${draggedId === item.id 
             ? 'opacity-40 border-amber-400/80 shadow-[0_0_20px_rgba(251,191,36,0.2)] scale-[0.98]' 
             : 'border-amber-500/15 hover:border-amber-400/50 hover:bg-stone-900/95'}`}
       >
-        <div className="flex items-center gap-2.5 overflow-hidden relative z-10 pr-2">
-          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-stone-900 overflow-hidden flex-shrink-0 border border-amber-500/20 relative shadow-inner">
+        <div className="flex items-center gap-2 overflow-hidden relative z-10 pr-2">
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-stone-900 overflow-hidden flex-shrink-0 border border-amber-500/20 relative shadow-inner">
             {item.image_url ? (
               <img src={item.image_url} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
             ) : (
@@ -89,9 +90,9 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, onQuickAdd, onQuickR
               onClick={(e) => { e.stopPropagation(); setShowRemoveModal(true); }}
               onTouchEnd={(e) => { e.stopPropagation(); setShowRemoveModal(true); }}
               title="Remove from Itinerary"
-              className="p-2 rounded-lg bg-rose-950/40 border border-rose-500/30 text-rose-300 hover:bg-rose-500 hover:text-stone-950 transition-all cursor-pointer"
+              className="p-1.5 rounded-lg bg-rose-950/40 border border-rose-500/30 text-rose-300 hover:bg-rose-500 hover:text-stone-950 transition-all cursor-pointer"
             >
-              <MinusCircle size={14} />
+              <MinusCircle size={13} />
             </button>
 
             <button
@@ -99,9 +100,9 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, onQuickAdd, onQuickR
               onClick={(e) => { e.stopPropagation(); setShowAddModal(true); }}
               onTouchEnd={(e) => { e.stopPropagation(); setShowAddModal(true); }}
               title="Add to Itinerary"
-              className="p-2 rounded-lg bg-amber-500/15 border border-amber-400/40 text-amber-300 hover:bg-amber-400 hover:text-stone-950 transition-all cursor-pointer"
+              className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-amber-300 hover:bg-amber-400 hover:text-stone-950 transition-all cursor-pointer"
             >
-              <PlusCircle size={14} />
+              <PlusCircle size={13} />
             </button>
           </div>
         </div>
@@ -112,30 +113,30 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, onQuickAdd, onQuickR
           className="absolute inset-0 z-50 bg-stone-950/98 backdrop-blur-2xl flex items-center justify-center p-3 rounded-2xl border border-amber-500/50 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-full flex flex-col gap-2.5">
-            <div className="flex items-center justify-between border-b border-amber-500/20 pb-1.5">
+          <div className="w-full flex flex-col gap-2">
+            <div className="flex items-center justify-between border-b border-amber-500/20 pb-1">
               <span className="text-[9px] font-serif uppercase tracking-[0.2em] text-amber-300 flex items-center gap-1">
-                <Crown size={11} className="text-amber-400" /> Curate Schedule
+                <Crown size={10} className="text-amber-400" /> Curate Schedule
               </span>
-              <button type="button" onClick={() => setShowAddModal(false)} className="text-stone-400 hover:text-amber-300 text-[11px] font-bold px-2 py-0.5 rounded-lg bg-stone-900 border border-amber-500/20 cursor-pointer">✕</button>
+              <button type="button" onClick={() => setShowAddModal(false)} className="text-stone-400 hover:text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-stone-900 border border-amber-500/20 cursor-pointer">✕</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[8px] font-serif uppercase tracking-wider text-stone-400 block mb-0.5">Target Day</label>
-                <select value={selectedDay} onChange={(e) => setSelectedDay(Number(e.target.value))} className="w-full bg-stone-900 border border-amber-500/30 rounded-xl px-2.5 py-1.5 text-[11px] text-stone-200 outline-none focus:border-amber-400 font-medium cursor-pointer">
+                <select value={selectedDay} onChange={(e) => setSelectedDay(Number(e.target.value))} className="w-full bg-stone-900 border border-amber-500/30 rounded-xl px-2 py-1 text-[11px] text-stone-200 outline-none focus:border-amber-400 font-medium cursor-pointer">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => <option key={d} value={d}>Day {d}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-[8px] font-serif uppercase tracking-wider text-stone-400 block mb-0.5">Time Slot</label>
-                <select value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)} className="w-full bg-stone-900 border border-amber-500/30 rounded-xl px-2.5 py-1.5 text-[11px] text-stone-200 outline-none focus:border-amber-400 font-medium cursor-pointer">
+                <select value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)} className="w-full bg-stone-900 border border-amber-500/30 rounded-xl px-2 py-1 text-[11px] text-stone-200 outline-none focus:border-amber-400 font-medium cursor-pointer">
                   {['Morning', 'Afternoon', 'Evening'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             </div>
             <div className="flex gap-2 pt-0.5">
-              <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2 rounded-xl bg-stone-900 border border-stone-800 text-[9px] font-serif uppercase tracking-wider text-stone-400 hover:text-stone-200 cursor-pointer">Cancel</button>
-              <button type="button" onClick={handleConfirmAdd} className="flex-1 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-[9px] font-serif font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-md"><Check size={12} /> Confirm</button>
+              <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-1.5 rounded-xl bg-stone-900 border border-stone-800 text-[9px] font-serif uppercase tracking-wider text-stone-400 hover:text-stone-200 cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleConfirmAdd} className="flex-1 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-[9px] font-serif font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-md"><Check size={11} /> Confirm</button>
             </div>
           </div>
         </div>
@@ -146,30 +147,30 @@ const InventoryItem = memo(({ item, onDragStart, onDragEnd, onQuickAdd, onQuickR
           className="absolute inset-0 z-50 bg-stone-950/98 backdrop-blur-2xl flex items-center justify-center p-3 rounded-2xl border border-rose-500/50 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-full flex flex-col gap-2.5">
-            <div className="flex items-center justify-between border-b border-rose-500/20 pb-1.5">
+          <div className="w-full flex flex-col gap-2">
+            <div className="flex items-center justify-between border-b border-rose-500/20 pb-1">
               <span className="text-[9px] font-serif uppercase tracking-[0.2em] text-rose-300 flex items-center gap-1">
-                <Calendar size={11} className="text-rose-400" /> Revoke Slot
+                <Calendar size={10} className="text-rose-400" /> Revoke Slot
               </span>
-              <button type="button" onClick={() => setShowRemoveModal(false)} className="text-stone-400 hover:text-rose-300 text-[11px] font-bold px-2 py-0.5 rounded-lg bg-stone-900 border border-rose-500/20 cursor-pointer">✕</button>
+              <button type="button" onClick={() => setShowRemoveModal(false)} className="text-stone-400 hover:text-rose-300 text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-stone-900 border border-rose-500/20 cursor-pointer">✕</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[8px] font-serif uppercase tracking-wider text-stone-400 block mb-0.5">Target Day</label>
-                <select value={selectedDay} onChange={(e) => setSelectedDay(Number(e.target.value))} className="w-full bg-stone-900 border border-rose-500/30 rounded-xl px-2.5 py-1.5 text-[11px] text-stone-200 outline-none focus:border-rose-400 font-medium cursor-pointer">
+                <select value={selectedDay} onChange={(e) => setSelectedDay(Number(e.target.value))} className="w-full bg-stone-900 border border-rose-500/30 rounded-xl px-2 py-1 text-[11px] text-stone-200 outline-none focus:border-rose-400 font-medium cursor-pointer">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => <option key={d} value={d}>Day {d}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-[8px] font-serif uppercase tracking-wider text-stone-400 block mb-0.5">Time Slot</label>
-                <select value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)} className="w-full bg-stone-900 border border-rose-500/30 rounded-xl px-2.5 py-1.5 text-[11px] text-stone-200 outline-none focus:border-rose-400 font-medium cursor-pointer">
+                <select value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)} className="w-full bg-stone-900 border border-rose-500/30 rounded-xl px-2.5 py-1 text-[11px] text-stone-200 outline-none focus:border-rose-400 font-medium cursor-pointer">
                   {['Morning', 'Afternoon', 'Evening'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             </div>
             <div className="flex gap-2 pt-0.5">
-              <button type="button" onClick={() => setShowRemoveModal(false)} className="flex-1 py-2 rounded-xl bg-stone-900 border border-stone-800 text-[9px] font-serif uppercase tracking-wider text-stone-400 hover:text-stone-200 cursor-pointer">Cancel</button>
-              <button type="button" onClick={handleConfirmRemove} className="flex-1 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-stone-950 text-[9px] font-serif font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-md"><Check size={12} /> Remove</button>
+              <button type="button" onClick={() => setShowRemoveModal(false)} className="flex-1 py-1.5 rounded-xl bg-stone-900 border border-stone-800 text-[9px] font-serif uppercase tracking-wider text-stone-400 hover:text-stone-200 cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleConfirmRemove} className="flex-1 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-stone-950 text-[9px] font-serif font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer shadow-md"><Check size={11} /> Remove</button>
             </div>
           </div>
         </div>
@@ -193,10 +194,12 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
   const userContext = useUrlUserContextWithFallback() as any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const storeTier = useItineraryStore((state: any) => state.residencyTier || state.tier);
+  const router = useRouter();
   
   const initialTier = propResidencyTier || propTier || storeTier || 'INTERNATIONAL';
   const [resolvedTier, setResolvedTier] = useState<string>(initialTier);
   const [loadingTier, setLoadingTier] = useState(!propResidencyTier && !propTier && !storeTier);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   useEffect(() => {
     const activeProp = propResidencyTier || propTier || storeTier;
@@ -262,8 +265,8 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const addItemStore = useItineraryStore((state: any) => state.addItem ?? state.addItemToTimeline ?? (() => {}));
 
-  const { totalPrice } = useMemo(() => {
-    if (!storeItems || storeItems.length === 0) return { baseTotal: 0, totalPrice: 0 };
+  const { subtotalPrice, checkoutTotal } = useMemo(() => {
+    if (!storeItems || storeItems.length === 0) return { subtotalPrice: 0, checkoutTotal: 0 };
     let base = 0;
     let total = 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -274,7 +277,7 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
       base += subtotalBase;
       total += (subtotalBase + (subtotalBase * 0.18) + (subtotalBase * 0.20));
     });
-    return { baseTotal: base, totalPrice: total };
+    return { subtotalPrice: base, checkoutTotal: total };
   }, [storeItems, normalizedTier]);
   
   const [activeCategory, setActiveCategory] = useState<string>('Lodges');
@@ -414,67 +417,88 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
     }
   }, [onRemoveItem]);
 
+  const handleFullCheckout = async () => {
+    if (checkoutTotal <= 0 || isCheckingOut) return;
+    setIsCheckingOut(true);
+    try {
+      const currentBookingId = `ESCP-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      try {
+        await saveUserItinerary();
+      } catch (saveError) {
+        console.warn("Non-blocking itinerary save warning:", saveError);
+      }
+      const checkoutUrl = `/checkout?amount=${checkoutTotal}&tier=${encodeURIComponent(normalizedTier)}&bookingId=${encodeURIComponent(currentBookingId)}`;
+      if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        window.location.assign(checkoutUrl);
+      } else {
+        router.push(checkoutUrl);
+      }
+    } catch (error) {
+      console.error("Checkout navigation error:", error);
+      setIsCheckingOut(false);
+    }
+  };
+
   const filteredItems = useMemo(() => 
     items.filter(i => i.name.toLowerCase().includes(search.toLowerCase())), 
   [items, search]);
 
   return (
-    <div className="flex flex-col h-full min-h-[75vh] md:min-h-0 bg-gradient-to-b from-stone-950 via-stone-950/98 to-zinc-950 backdrop-blur-3xl rounded-[2rem] md:rounded-[2.5rem] border border-amber-500/20 shadow-[0_25px_60px_rgba(0,0,0,0.8)] overflow-hidden text-stone-100 pb-24 md:pb-0">
+    <div className="flex flex-col h-full min-h-[75vh] md:min-h-0 bg-gradient-to-b from-stone-950 via-stone-950/98 to-zinc-950 backdrop-blur-3xl rounded-[2rem] md:rounded-[2.5rem] border border-amber-500/20 shadow-[0_25px_60px_rgba(0,0,0,0.8)] overflow-hidden text-stone-100 pb-16 md:pb-0">
       
-      <div className="p-3.5 sm:p-4 border-b border-amber-500/15 space-y-3 bg-stone-900/90 backdrop-blur-xl flex-shrink-0 shadow-sm">
+      <div className="p-3 sm:p-3.5 border-b border-amber-500/15 space-y-2.5 bg-stone-900/90 backdrop-blur-xl flex-shrink-0 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-gradient-to-br from-amber-400/20 to-amber-600/10 border border-amber-400/40 rounded-xl shadow-inner">
-              <Crown size={13} className="text-amber-400" />
+              <Crown size={12} className="text-amber-400" />
             </div>
             <h2 className="font-serif font-bold text-stone-100 text-xs uppercase tracking-[0.2em]">Curated Portfolio</h2>
           </div>
           
-          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-stone-950/90 rounded-lg border border-amber-500/30 shadow-inner">
-            <ShieldCheck size={11} className="text-amber-400" />
+          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-stone-950/90 rounded-lg border border-amber-500/30 shadow-inner">
+            <ShieldCheck size={10} className="text-amber-400" />
             <span className="text-[8px] sm:text-[9px] font-serif font-bold uppercase tracking-widest text-amber-300">
               {loadingTier ? 'SYNC...' : `${normalizedTier}`}
             </span>
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-2.5">
-           <div className="flex items-center justify-between px-3 py-1.5 bg-stone-950/90 rounded-xl border border-amber-500/20 shadow-inner">
+        <div className="grid grid-cols-2 gap-2">
+           <div className="flex items-center justify-between px-2.5 py-1 bg-stone-950/90 rounded-xl border border-amber-500/20 shadow-inner">
              <div className="flex items-center gap-1.5">
-               <Users size={11} className="text-amber-400/80" />
-               <span className="text-[9px] font-serif font-semibold text-stone-300 uppercase tracking-wider">Adults</span>
+               <Users size={10} className="text-amber-400/80" />
+               <span className="text-[8px] sm:text-[9px] font-serif font-semibold text-stone-300 uppercase tracking-wider">Adults</span>
              </div>
-             <div className="flex items-center gap-1.5 bg-stone-900 px-2 py-0.5 rounded-lg border border-amber-500/20">
-               <button type="button" onClick={() => setGuests(Math.max(1, adults - 1), children)} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Minus size={10}/></button>
-               <span className="text-[11px] font-serif font-bold text-amber-300 min-w-[12px] text-center">{adults}</span>
-               <button type="button" onClick={() => setGuests(adults + 1, children)} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Plus size={10}/></button>
+             <div className="flex items-center gap-1 bg-stone-900 px-1.5 py-0.5 rounded-lg border border-amber-500/20">
+               <button type="button" onClick={() => setGuests(Math.max(1, adults - 1), children)} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Minus size={9}/></button>
+               <span className="text-[10px] font-serif font-bold text-amber-300 min-w-[10px] text-center">{adults}</span>
+               <button type="button" onClick={() => setGuests(adults + 1, children)} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Plus size={9}/></button>
              </div>
            </div>
 
-           <div className="flex items-center justify-between px-3 py-1.5 bg-stone-950/90 rounded-xl border border-amber-500/20 shadow-inner">
+           <div className="flex items-center justify-between px-2.5 py-1 bg-stone-950/90 rounded-xl border border-amber-500/20 shadow-inner">
              <div className="flex items-center gap-1.5">
-               <Users size={11} className="text-amber-400/80" />
-               <span className="text-[9px] font-serif font-semibold text-stone-300 uppercase tracking-wider">Kids</span>
+               <Users size={10} className="text-amber-400/80" />
+               <span className="text-[8px] sm:text-[9px] font-serif font-semibold text-stone-300 uppercase tracking-wider">Kids</span>
              </div>
-             <div className="flex items-center gap-1.5 bg-stone-900 px-2 py-0.5 rounded-lg border border-amber-500/20">
-               <button type="button" onClick={() => setGuests(adults, Math.max(0, children - 1))} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Minus size={10}/></button>
-               <span className="text-[11px] font-serif font-bold text-amber-300 min-w-[12px] text-center">{children}</span>
-               <button type="button" onClick={() => setGuests(adults, children + 1)} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Plus size={10}/></button>
+             <div className="flex items-center gap-1 bg-stone-900 px-1.5 py-0.5 rounded-lg border border-amber-500/20">
+               <button type="button" onClick={() => setGuests(adults, Math.max(0, children - 1))} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Minus size={9}/></button>
+               <span className="text-[10px] font-serif font-bold text-amber-300 min-w-[10px] text-center">{children}</span>
+               <button type="button" onClick={() => setGuests(adults, children + 1)} className="text-stone-400 hover:text-amber-300 cursor-pointer p-0.5"><Plus size={9}/></button>
              </div>
            </div>
         </div>
 
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 text-amber-500/50" size={14} />
+          <Search className="absolute left-3 top-2 text-amber-500/50" size={13} />
           <input 
             placeholder={`Search ${activeCategory.toLowerCase()} collection...`} 
-            className="w-full pl-9 pr-3 py-2 bg-stone-950/90 rounded-xl text-xs text-stone-100 placeholder:text-stone-500 outline-none border border-amber-500/20 focus:border-amber-400/80 font-medium shadow-inner transition-colors" 
+            className="w-full pl-8 pr-3 py-1.5 bg-stone-950/90 rounded-xl text-[11px] text-stone-100 placeholder:text-stone-500 outline-none border border-amber-500/20 focus:border-amber-400/80 font-medium shadow-inner transition-colors" 
             onChange={(e) => setSearch(e.target.value)} 
           />
         </div>
 
-        {/* Scrollable category selection tabs explicitly visible on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {CATEGORY_CONFIG.map((cat) => {
             const isActive = activeCategory === cat.label;
             return (
@@ -482,25 +506,25 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
                 type="button"
                 key={cat.label} 
                 onClick={() => setActiveCategory(cat.label)} 
-                className={`flex flex-col items-center gap-1 p-2 min-w-[64px] rounded-xl transition-all duration-300 border cursor-pointer shrink-0 ${
+                className={`flex flex-col items-center gap-0.5 p-1.5 min-w-[56px] rounded-xl transition-all duration-300 border cursor-pointer shrink-0 ${
                   isActive 
-                    ? 'bg-gradient-to-br from-amber-400 to-amber-500 text-stone-950 border-amber-300 font-bold shadow-[0_0_15px_rgba(251,191,36,0.3)] scale-[1.02]' 
+                    ? 'bg-gradient-to-br from-amber-400 to-amber-500 text-stone-950 border-amber-300 font-bold shadow-[0_0_12px_rgba(251,191,36,0.3)] scale-[1.02]' 
                     : 'bg-stone-950/60 border-amber-500/15 text-stone-400 hover:bg-stone-900 hover:text-stone-200 font-medium'
                 }`}
               >
-                <cat.icon size={16} className={isActive ? 'text-stone-950' : 'text-amber-400/80'} /> 
-                <span className="text-[10px] font-serif tracking-wide">{cat.label}</span>
+                <cat.icon size={14} className={isActive ? 'text-stone-950' : 'text-amber-400/80'} /> 
+                <span className="text-[9px] font-serif tracking-wide">{cat.label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="flex-1 min-h-[360px] overflow-y-auto p-3.5 sm:p-4 space-y-3 scrollbar-thin scrollbar-thumb-amber-500/20">
+      <div className="flex-1 min-h-[300px] overflow-y-auto p-3 space-y-2.5 scrollbar-thin scrollbar-thumb-amber-500/20">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="animate-spin text-amber-400" size={24} />
-            <span className="text-[10px] font-serif uppercase tracking-[0.2em] text-stone-500">Accessing Archives...</span>
+          <div className="flex flex-col items-center justify-center py-16 gap-2">
+            <Loader2 className="animate-spin text-amber-400" size={20} />
+            <span className="text-[9px] font-serif uppercase tracking-[0.2em] text-stone-500">Accessing Archives...</span>
           </div>
         ) : filteredItems.length > 0 ? (
           filteredItems.map(item => (
@@ -516,28 +540,40 @@ export const ItineraryBuilder = ({ tier: propTier, residencyTier: propResidencyT
             />
           ))
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-            <p className="text-xs font-serif text-stone-400">No bespoke items found in this tier</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+            <p className="text-[11px] font-serif text-stone-400">No bespoke items found in this tier</p>
           </div>
         )}
       </div>
 
-      {/* Super Compact, Minimalist Pinned Checkout & Totals Bar relocated to the bottom */}
-      <div className="px-3.5 py-2.5 bg-stone-900/95 border-t border-amber-500/20 flex items-center justify-between gap-2 flex-shrink-0 z-30 backdrop-blur-xl shadow-[0_-10px_25px_rgba(0,0,0,0.5)]">
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-serif font-bold uppercase tracking-[0.15em] text-amber-400/80">Total</span>
-          <span className="text-xs sm:text-sm font-serif font-bold text-amber-300 tracking-tight">
-            ${totalPrice.toLocaleString()}
+      <div className="px-3 py-2.5 bg-stone-950/95 border-t border-amber-500/20 flex flex-col gap-2 flex-shrink-0 z-30 backdrop-blur-xl shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[9px] font-serif font-bold uppercase tracking-[0.15em] text-amber-400/80">Subtotal Investment</span>
+          <span className="text-xs font-serif font-bold text-amber-300 tracking-tight">
+            ${subtotalPrice.toLocaleString()}
           </span>
         </div>
 
-        <div className="scale-90 sm:scale-100 origin-right">
-          <CheckoutButton 
-            amount={totalPrice} 
-            itineraryId="pending-id" 
-            className="bg-amber-400 hover:bg-amber-300 text-stone-950 font-serif font-bold uppercase text-[9px] tracking-[0.15em] py-1.5 px-3.5 rounded-lg transition-all duration-300 cursor-pointer shadow-md border border-amber-300/40 text-center flex items-center justify-center gap-1" 
-          />
-        </div>
+        <button
+          type="button"
+          onClick={handleFullCheckout}
+          disabled={isCheckingOut || subtotalPrice <= 0}
+          className="relative group overflow-hidden w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-[11px] uppercase tracking-wider transition-all shadow-lg active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+        >
+          <div className="absolute inset-0 w-1/2 h-full bg-white/20 skew-x-12 -translate-x-full group-hover:translate-x-[300%]" />
+          {isCheckingOut ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-950" />
+              <span>Preparing Secure Gateway...</span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="w-3.5 h-3.5 text-stone-950/80 group-hover:scale-110 transition-transform" />
+              <span>Proceed to Secure Checkout (${checkoutTotal.toLocaleString()})</span>
+              <ArrowRight className="w-3 h-3 text-stone-950/80 group-hover:translate-x-1 transition-transform" />
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

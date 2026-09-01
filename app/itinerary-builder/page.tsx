@@ -389,18 +389,24 @@ export const SafariStudio = () => {
           <span className="text-[10px] font-bold uppercase tracking-wider">Catalog</span>
         </button>
         <button 
-          type="button"
-          onClick={() => setIsCartModalOpen(true)}
-          className="flex flex-col items-center gap-1 text-slate-400 relative"
-        >
-          <ShoppingCart size={20} />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Cart</span>
-          {allItineraryItems.length > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] flex items-center justify-center">
-              {allItineraryItems.length}
-            </span>
-          )}
-        </button>
+  type="button"
+  onClick={() => setIsCartModalOpen(true)}
+  className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 px-4 py-2.5 rounded-2xl transition relative group cursor-pointer"
+>
+  <div className="relative text-slate-400 group-hover:text-amber-400 transition-colors">
+    <ShoppingCart size={20} />
+    {allItineraryItems.length > 0 && (
+      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] flex items-center justify-center">
+        {allItineraryItems.length}
+      </span>
+    )}
+  </div>
+
+  <div className="flex flex-col text-left">
+    <span className="text-[10px] font-bold uppercase tracking-wider text-white">Itinerary Cart</span>
+   
+  </div>
+</button>
       </div>
 
       <div className="relative z-20 flex h-full items-center">
@@ -752,6 +758,21 @@ export const SafariStudio = () => {
               >
                 Confirm & Return to Studio
               </button>
+              <button
+    type="button"
+    onClick={() => {
+      // 1. Store cart payload and live total for checkout/payment gateway verification
+      localStorage.setItem('checkout_total', estimatedTotal.toString());
+      localStorage.setItem('checkout_items', JSON.stringify(allItineraryItems));
+      
+      // 2. Close modal and navigate to checkout
+      setIsCartModalOpen(false);
+      router.push(`/checkout?amount=${estimatedTotal}&tier=${residencyTier}`);
+    }}
+    className="flex-1 py-3 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] uppercase tracking-wider transition-all shadow-lg cursor-pointer flex items-center justify-center text-center"
+  >
+    Proceed to Checkout (${estimatedTotal.toLocaleString()})
+  </button>
             </div>
 
           </div>

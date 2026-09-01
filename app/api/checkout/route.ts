@@ -1,3 +1,4 @@
+// app/api/checkout/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from "@supabase/supabase-js";
 
@@ -57,13 +58,13 @@ export async function POST(req: Request) {
     const { bookingId, amount, itineraryId, items, tier } = body;
 
     let totalAmount = Number(amount) || 0;
-    let referenceId = bookingId || itineraryId;
+    let referenceId = bookingId || itineraryId || `ESC-${Date.now()}`;
     let customerEmail = "customer@escapetourstz.com";
     let customerPhone = "0700000000";
     let customerName = "Escape Customer";
 
     // 1. If a bookingId is provided, fetch the authoritative record from Supabase
-    if (bookingId) {
+    if (bookingId && bookingId !== 'ESCP-BESPOKE') {
       const { data: booking, error: dbError } = await supabase
         .from('bookings')
         .select('*')
@@ -91,11 +92,11 @@ export async function POST(req: Request) {
         .select('price')
         .eq('itinerary_id', itineraryId);
 
-      if (dbError || !dbItems) throw new Error("Could not fetch itinerary items");
-      
-      const baseTotal = dbItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-      totalAmount = Math.round(baseTotal * 1.18);
-      referenceId = itineraryId;
+      if (!dbError && dbItems && dbItems.length > 0) {
+        const baseTotal = dbItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+        totalAmount = Math.round(baseTotal * 1.18);
+        referenceId = itineraryId;
+      }
     }
 
     if (totalAmount <= 0) {
@@ -126,7 +127,6 @@ export async function POST(req: Request) {
       }
     };
 
-    // Print out exact payload for inspection
     console.log("Submitting PesaPal Order Payload:", JSON.stringify(orderPayload, null, 2));
 
     // Initiate PesaPal Request with the fresh dynamic token
