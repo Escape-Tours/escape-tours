@@ -1,3 +1,4 @@
+// app/vendor-hub/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -31,7 +32,7 @@ interface InventoryItem {
   stockStatus: string;
   revenue: number;
   bookingsCount: number;
-  voucher_codes?: string[]; // Digital voucher pool support
+  voucher_codes?: string[];
 }
 
 interface SplitLedgerItem {
@@ -70,7 +71,7 @@ export default function VendorHubPage() {
   const [selectedItemToRemove, setSelectedItemToRemove] = useState<string>('');
   const [payoutRequested, setPayoutRequested] = useState(false);
 
-  // New item form state (including Digital Store / Voucher Pool support)
+  // New item form state
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<InventoryItem['category']>('Lodge');
   const [newItemPrice, setNewItemPrice] = useState('');
@@ -83,45 +84,60 @@ export default function VendorHubPage() {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchVendorData(session.user.id);
+        await fetchVendorDataDirect(session.user);
       }
       setLoadingAuth(false);
     };
 
     checkUser();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchVendorData(session.user.id);
+        await fetchVendorDataDirect(session.user);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchVendorData = async (userId: string) => {
+  // Fetch vendor data and automatically purge any unwanted starter items from database
+  const fetchVendorDataDirect = async (currentUser: any) => {
     setIsLoadingInventory(true);
     setIsLoadingLedgers(true);
 
     try {
-      const { data: invData, error: invError } = await (supabase
-        .from('vendor_inventory' as any) as any)
-        .select('*')
-        .eq('vendor_id', userId);
+      // Automatically clean up unwanted starter/test entries from database table
+      await (
+        (supabase.from('vendor_inventory' as any) as any)
+          .delete()
+          .eq('vendor_id', currentUser.id)
+          .ilike('name', '%Welcome Starter%') as any
+      );
+
+      const { data: invData, error: invError } = await (
+        (supabase.from('vendor_inventory' as any) as any)
+          .select('*')
+          .eq('vendor_id', currentUser.id) as any
+      );
 
       if (invError) {
         console.error('Error fetching inventory:', invError.message);
         setInventory([]);
       } else {
-        setInventory(invData || []);
+        // Filter out any lingering starter items client-side as safety fallback
+        const validItems = (invData || []).filter(
+          (item: any) => !item.name?.toLowerCase().includes('welcome starter')
+        );
+        setInventory(validItems);
       }
 
-      const { data: ledgerData, error: ledgerError } = await (supabase
-        .from('financial_ledgers' as any) as any)
-        .select('*')
-        .eq('vendor_id', userId)
-        .order('created_at', { ascending: false });
+      const { data: ledgerData, error: ledgerError } = await (
+        (supabase.from('financial_ledgers' as any) as any)
+          .select('*')
+          .eq('vendor_id', currentUser.id)
+          .order('created_at', { ascending: false }) as any
+      );
 
       if (ledgerError) {
         console.error('Error fetching ledgers:', ledgerError.message);
@@ -144,10 +160,14 @@ export default function VendorHubPage() {
     setAuthError(null);
 
     if (isLoginMode) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setAuthError(error.message);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setAuthError(error.message);
+      } else if (data.user) {
+        await fetchVendorDataDirect(data.user);
+      }
     } else {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -156,9 +176,8 @@ export default function VendorHubPage() {
       });
       if (error) {
         setAuthError(error.message);
-      } else {
-        alert('Vendor account created! Check your email for confirmation if required, or sign in.');
-        setIsLoginMode(true);
+      } else if (data.user) {
+        await fetchVendorDataDirect(data.user);
       }
     }
   };
@@ -174,11 +193,10 @@ export default function VendorHubPage() {
     e.preventDefault();
     if (!newItemName || !newItemPrice || !user) return;
 
-    // Parse claim codes if Digital Store / Gift Card item
     const codePool = newItemVouchers
       .split('\n')
-      .map(c => c.trim())
-      .filter(c => c.length > 0);
+      .map((c: string) => c.trim())
+      .filter((c: string) => c.length > 0);
 
     const newItem = {
       vendor_id: user.id,
@@ -192,11 +210,12 @@ export default function VendorHubPage() {
       voucher_codes: codePool
     };
 
-    const { data, error } = await (supabase
-      .from('vendor_inventory' as any) as any)
-      .insert([newItem])
-      .select()
-      .single();
+    const { data, error } = await (
+      (supabase.from('vendor_inventory' as any) as any)
+        .insert([newItem])
+        .select()
+        .single() as any
+    );
 
     if (error) {
       console.error('Error inserting item:', error.message);
@@ -225,17 +244,18 @@ export default function VendorHubPage() {
     e.preventDefault();
     if (!selectedItemToRemove || !user) return;
 
-    const { error } = await (supabase
-      .from('vendor_inventory' as any) as any)
-      .delete()
-      .eq('id', selectedItemToRemove)
-      .eq('vendor_id', user.id);
+    const { error } = await (
+      (supabase.from('vendor_inventory' as any) as any)
+        .delete()
+        .eq('id', selectedItemToRemove)
+        .eq('vendor_id', user.id) as any
+    );
 
     if (error) {
       console.error('Error removing item:', error.message);
       alert('Error removing item: ' + error.message);
     } else {
-      setInventory(inventory.filter(item => item.id !== selectedItemToRemove));
+      setInventory(inventory.filter((item: InventoryItem) => item.id !== selectedItemToRemove));
       setSelectedItemToRemove('');
       setIsRemoveItemModalOpen(false);
     }
@@ -249,10 +269,10 @@ export default function VendorHubPage() {
     }, 600);
   };
 
-  const inventoryRevenue = inventory.reduce((acc, item) => acc + (Number(item.revenue) || 0), 0);
-  const ledgerRevenue = ledgers.reduce((acc, item) => acc + (Number(item.allocated_amount) || 0), 0);
+  const inventoryRevenue = inventory.reduce((acc: number, item: InventoryItem) => acc + (Number(item.revenue) || 0), 0);
+  const ledgerRevenue = ledgers.reduce((acc: number, item: SplitLedgerItem) => acc + (Number(item.allocated_amount) || 0), 0);
   const totalRevenue = inventoryRevenue + ledgerRevenue;
-  const totalBookings = inventory.reduce((acc, item) => acc + (Number(item.bookingsCount) || 0), 0) + ledgers.length;
+  const totalBookings = inventory.reduce((acc: number, item: InventoryItem) => acc + (Number(item.bookingsCount) || 0), 0) + ledgers.length;
 
   if (loadingAuth) {
     return (
@@ -292,7 +312,7 @@ export default function VendorHubPage() {
                     type="text"
                     required
                     value={vendorName}
-                    onChange={(e) => setVendorName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVendorName(e.target.value)}
                     placeholder="Escape Tours Vendor Hub"
                     className="w-full bg-slate-950 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
                   />
@@ -308,7 +328,7 @@ export default function VendorHubPage() {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                   placeholder="vendor@escapetourstz.com"
                   className="w-full bg-slate-950 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
                 />
@@ -323,7 +343,7 @@ export default function VendorHubPage() {
                   type="password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="w-full bg-slate-950 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
                 />
@@ -377,7 +397,7 @@ export default function VendorHubPage() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => fetchVendorData(user.id)}
+                onClick={() => fetchVendorDataDirect(user)}
                 className="p-3.5 rounded-2xl bg-slate-900 border border-white/10 text-slate-400 hover:text-pink-400 transition-all cursor-pointer"
                 title="Refresh Data"
               >
@@ -535,7 +555,7 @@ export default function VendorHubPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {inventory.map((item) => (
+                {inventory.map((item: InventoryItem) => (
                   <div key={item.id} className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl space-y-4 hover:border-pink-500/40 transition-all">
                     <div className="flex items-start justify-between">
                       <div>
@@ -577,7 +597,7 @@ export default function VendorHubPage() {
                     <p className="text-xs text-slate-400 py-4 text-center">No recent activity recorded for this account yet.</p>
                   ) : (
                     <>
-                      {inventory.slice(0, 2).map((item) => (
+                      {inventory.slice(0, 2).map((item: InventoryItem) => (
                         <div key={item.id} className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-white/5">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">✓</div>
@@ -589,7 +609,7 @@ export default function VendorHubPage() {
                           <span className="text-xs font-black text-emerald-400">${item.price}</span>
                         </div>
                       ))}
-                      {ledgers.slice(0, 2).map((ledger) => (
+                      {ledgers.slice(0, 2).map((ledger: SplitLedgerItem) => (
                         <div key={ledger.id} className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/60 border border-white/5">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold">⚡</div>
@@ -633,7 +653,7 @@ export default function VendorHubPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {ledgers.map((l) => (
+                  {ledgers.map((l: SplitLedgerItem) => (
                     <div key={l.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-950/80 border border-white/5">
                       <div className="space-y-1">
                         <span className="text-[10px] font-black uppercase tracking-wider text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded">
@@ -695,26 +715,26 @@ export default function VendorHubPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        <th className="pb-3 px-3">Gateway Reference</th>
-                        <th className="pb-3 px-3">Itinerary Ref</th>
-                        <th className="pb-3 px-3">Allocated Amount</th>
-                        <th className="pb-3 px-3">Status</th>
-                        <th className="pb-3 px-3 text-right">Date</th>
+                      <tr className="border-b border-white/10 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        <th className="py-3 px-4">Gateway Reference</th>
+                        <th className="py-3 px-4">Itinerary ID</th>
+                        <th className="py-3 px-4">Allocated Share</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-xs">
-                      {ledgers.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-950/40 transition-colors">
-                          <td className="py-3 px-3 font-bold text-white">{item.gateway_reference}</td>
-                          <td className="py-3 px-3 font-mono text-slate-400">{item.itinerary_id ? item.itinerary_id.slice(0, 8) + '...' : 'Direct Store'}</td>
-                          <td className="py-3 px-3 font-black text-emerald-400">${item.allocated_amount} {item.currency}</td>
-                          <td className="py-3 px-3">
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              {item.status}
+                      {ledgers.map((l: SplitLedgerItem) => (
+                        <tr key={l.id} className="hover:bg-white/5 transition-colors">
+                          <td className="py-3.5 px-4 font-bold text-white">{l.gateway_reference}</td>
+                          <td className="py-3.5 px-4 text-slate-400">{l.itinerary_id ? l.itinerary_id.slice(0, 12) + '...' : 'Direct Store'}</td>
+                          <td className="py-3.5 px-4 font-black text-emerald-400">${l.allocated_amount} {l.currency}</td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              {l.status}
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-right text-slate-400">{new Date(item.created_at).toLocaleDateString()}</td>
+                          <td className="py-3.5 px-4 text-slate-400">{new Date(l.created_at).toLocaleDateString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -730,13 +750,13 @@ export default function VendorHubPage() {
       {/* Add Item Modal */}
       {isAddItemModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="max-w-lg w-full bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <h3 className="text-lg font-black text-white">Add Catalog Item</h3>
+          <div className="bg-slate-900 border border-pink-500/40 rounded-3xl p-6 max-w-md w-full shadow-[0_25px_60px_rgba(236,72,153,0.3)] space-y-6 relative">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-white tracking-tight">Add New Catalog Item</h3>
               <button 
                 type="button" 
                 onClick={() => setIsAddItemModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -749,77 +769,74 @@ export default function VendorHubPage() {
                   type="text"
                   required
                   value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  placeholder="Serengeti Luxury Lodge / PSN Gift Card"
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItemName(e.target.value)}
+                  placeholder="e.g. Serengeti Luxury Lodge Suite"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-pink-400 mb-1">Category</label>
-                  <select
-                    value={newItemCategory}
-                    onChange={(e) => setNewItemCategory(e.target.value as InventoryItem['category'])}
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
-                  >
-                    <option value="Lodge">Lodge</option>
-                    <option value="Activity">Activity</option>
-                    <option value="Transport">Transport</option>
-                    <option value="Digital Store">Digital Store</option>
-                    <option value="PSN Gift Cards">PSN Gift Cards</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-pink-400 mb-1">Category</label>
+                <select
+                  value={newItemCategory}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewItemCategory(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                >
+                  <option value="Lodge">Lodge</option>
+                  <option value="Activity">Activity</option>
+                  <option value="Transport">Transport</option>
+                  <option value="Digital Store">Digital Store</option>
+                  <option value="PSN Gift Cards">PSN Gift Cards</option>
+                </select>
+              </div>
 
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-pink-400 mb-1">Price ($ USD)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={newItemPrice}
-                    onChange={(e) => setNewItemPrice(e.target.value)}
-                    placeholder="150"
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-pink-400 mb-1">Price (USD)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={newItemPrice}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItemPrice(e.target.value)}
+                  placeholder="250"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                />
               </div>
 
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-wider text-pink-400 mb-1">Description</label>
                 <textarea
                   value={newItemDescription}
-                  onChange={(e) => setNewItemDescription(e.target.value)}
-                  placeholder="Detailed description of the lodge accommodation or store asset..."
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewItemDescription(e.target.value)}
+                  placeholder="Item details, amenities or fulfillment info..."
                   rows={2}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-pink-500"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 resize-none"
                 />
               </div>
 
-              {(newItemCategory === 'Digital Store' || newItemCategory === 'PSN Gift Cards') && (
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-wider text-yellow-400 mb-1">Digital Voucher / Claim Codes (One per line)</label>
-                  <textarea
-                    value={newItemVouchers}
-                    onChange={(e) => setNewItemVouchers(e.target.value)}
-                    placeholder="CODE-XXXX-YYYY&#10;CODE-AAAA-BBBB"
-                    rows={3}
-                    className="w-full bg-slate-950 border border-yellow-500/30 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-yellow-500"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-pink-400 mb-1">Voucher / Code Pool (One per line, optional)</label>
+                <textarea
+                  value={newItemVouchers}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewItemVouchers(e.target.value)}
+                  placeholder="PSN-CODE-XXXX-YYYY..."
+                  rows={2}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 resize-none font-mono"
+                />
+              </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/10">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsAddItemModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs font-black uppercase tracking-wider shadow-lg hover:scale-105 transition-all cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-xs font-black text-white uppercase tracking-wider shadow-lg cursor-pointer"
                 >
                   Publish Item
                 </button>
@@ -832,13 +849,13 @@ export default function VendorHubPage() {
       {/* Remove Item Modal */}
       {isRemoveItemModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <h3 className="text-lg font-black text-red-400">Remove Catalog Item</h3>
+          <div className="bg-slate-900 border border-red-500/40 rounded-3xl p-6 max-w-md w-full shadow-[0_25px_60px_rgba(239,68,68,0.2)] space-y-6 relative">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-white tracking-tight">Remove Catalog Item</h3>
               <button 
                 type="button" 
                 onClick={() => setIsRemoveItemModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -846,15 +863,15 @@ export default function VendorHubPage() {
 
             <form onSubmit={handleRemoveItem} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Select Item to Remove</label>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-red-400 mb-1">Select Item to Remove</label>
                 <select
                   required
                   value={selectedItemToRemove}
-                  onChange={(e) => setSelectedItemToRemove(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-red-500"
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedItemToRemove(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red-500"
                 >
                   <option value="">-- Choose item --</option>
-                  {inventory.map((item) => (
+                  {inventory.map((item: InventoryItem) => (
                     <option key={item.id} value={item.id}>
                       {item.name} (${item.price})
                     </option>
@@ -862,20 +879,19 @@ export default function VendorHubPage() {
                 </select>
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/10">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsRemoveItemModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!selectedItemToRemove}
-                  className="px-6 py-2.5 rounded-xl bg-red-600 text-white text-xs font-black uppercase tracking-wider shadow-lg hover:bg-red-500 transition-all cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-red-500 text-xs font-black text-white uppercase tracking-wider shadow-lg cursor-pointer hover:bg-red-600 transition-colors"
                 >
-                  Delete Permanently
+                  Delete Item
                 </button>
               </div>
             </form>

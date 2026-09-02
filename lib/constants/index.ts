@@ -3,7 +3,7 @@
 export type ResidencyTier = 'CITIZEN' | 'RESIDENT' | 'INTERNATIONAL';
 
 export const TAX_RATE = 0.18;
-export const AGENCY_COMMISSION = 0.15;
+export const AGENCY_COMMISSION = 0.20;
 
 export interface TieredPrice {
   CITIZEN?: number;
@@ -42,3 +42,17 @@ export const resolvePrice = (
 
   return 0;
 };
+
+// Fleet & Dispatch Hub Expanded Locations
+export const SAFARI_LOCATIONS = [
+  "Mikumi Gate",
+  "Seronera Airstrip",
+  "Ngorongoro Crater Rim",
+  "Tarangire Main Gate",
+  "Lake Manyara National Park",
+  "Nyerere National Park (Selous)",
+  "Arusha National Park",
+  "Ruaha National Park",
+] as const;
+
+export type SafariLocation = (typeof SAFARI_LOCATIONS)[number];

@@ -9,19 +9,12 @@ import {
   AlertCircle, 
   Download, 
   Search, 
-  Filter, 
   ShieldCheck, 
   RefreshCw, 
   ChevronRight, 
-  FileText, 
-  PieChart, 
   Briefcase, 
-  CreditCard,
-  Building2,
-  Users,
   Compass,
-  Crown,
-  Sparkles
+  Crown
 } from 'lucide-react';
 
 interface FinancialLedger {
@@ -48,53 +41,41 @@ export default function LuxuryFinancialsPage() {
     setLoading(true);
     const supabase = createClient();
     
-    // Fetch from financial_ledgers table with fallback mock data if empty
-    const { data, error } = await (supabase.from('financial_ledgers' as any) as any)
+    // Fallback/Cast to any or bookings if financial_ledgers table isn't generated in Supabase types yet, 
+    // or query bookings table which contains financial columns for Escape Tours.
+    const { data, error } = await (supabase as any)
+      .from('financial_ledgers')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-      // Luxury realistic fallback data matching Escape Tours operations
-      setLedgers([
-        {
-          id: 'LEDGER-9021',
-          itinerary_id: 'SER-881-TZ',
-          client_name: 'Lord Alistair Sterling',
-          total_amount: 18500,
-          paid_amount: 18500,
-          balance_due: 0,
-          status: 'PAID',
-          payment_method: 'Stripe / Wire Transfer',
-          vendor_split_status: 'Settled (Lodges: $11k, Parks: $4k, Guides: $3.5k)',
-          created_at: '2026-08-28T10:00:00Z'
-        },
-        {
-          id: 'LEDGER-9022',
-          itinerary_id: 'KILI-404-TZ',
-          client_name: 'Dr. Genevieve Dupont',
-          total_amount: 12400,
-          paid_amount: 8000,
-          balance_due: 4400,
-          status: 'PARTIAL',
-          payment_method: 'PesaPal / Multi-Currency',
-          vendor_split_status: 'Pending Final Instalment',
-          created_at: '2026-08-30T14:30:00Z'
-        },
-        {
-          id: 'LEDGER-9023',
-          itinerary_id: 'ZAN-303-TZ',
-          client_name: 'Marcus Vance',
-          total_amount: 6200,
-          paid_amount: 0,
-          balance_due: 6200,
-          status: 'PENDING',
-          payment_method: 'Airtel Mobile Money',
-          vendor_split_status: 'Unassigned',
-          created_at: '2026-09-01T09:15:00Z'
-        }
-      ]);
+    if (error) {
+      console.error('Error fetching financial ledgers:', error.message);
+      // Fallback query to bookings table if financial_ledgers view/table isn't ready
+      const { data: bookingData, error: bookingError } = await supabase
+        .from('bookings')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (bookingError) {
+        console.error('Error fetching fallback bookings financial data:', bookingError.message);
+        setLedgers([]);
+      } else {
+        const mappedBookings: FinancialLedger[] = (bookingData || []).map((b: any) => ({
+          id: b.id,
+          itinerary_id: b.itinerary_id || b.id.slice(0, 8),
+          client_name: b.client_name || b.guest_name || 'Valued Client',
+          total_amount: b.total_amount || b.total_price || 0,
+          paid_amount: b.paid_amount || 0,
+          balance_due: b.balance_due || (b.total_amount || b.total_price || 0) - (b.paid_amount || 0),
+          status: b.status || 'PENDING',
+          payment_method: b.payment_method || 'Credit Card / Gateway',
+          vendor_split_status: b.vendor_split_status || 'Pending Multi-Vendor Split',
+          created_at: b.created_at || new Date().toISOString()
+        }));
+        setLedgers(mappedBookings);
+      }
     } else {
-      setLedgers(data);
+      setLedgers((data as FinancialLedger[]) || []);
     }
     setLoading(false);
   };
@@ -103,14 +84,15 @@ export default function LuxuryFinancialsPage() {
     fetchLedgers();
   }, []);
 
-  // Calculate Metrics
+  // Calculate Metrics from real-life data
   const totalRevenue = ledgers.reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
   const totalCollected = ledgers.reduce((acc, curr) => acc + (curr.paid_amount || 0), 0);
   const totalOutstanding = ledgers.reduce((acc, curr) => acc + (curr.balance_due || 0), 0);
   
   const filteredLedgers = ledgers.filter(ledger => {
-    const matchesSearch = ledger.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          ledger.itinerary_id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = ledger.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          ledger.itinerary_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          ledger.id?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || ledger.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -119,8 +101,8 @@ export default function LuxuryFinancialsPage() {
     setIsExporting(true);
     setTimeout(() => {
       const csvContent = "data:text/csv;charset=utf-8," + 
-        ["Ledger ID,Client,Itinerary,Total,Paid,Balance Due,Status,Payment Method"].join(",") + "\n" +
-        ledgers.map(l => `${l.id},"${l.client_name}",${l.itinerary_id},${l.total_amount},${l.paid_amount},${l.balance_due},${l.status},"${l.payment_method}"`).join("\n");
+        ["Ledger ID,Client,Itinerary,Total,Paid,Balance Due,Status,Payment Method,Vendor Split Status"].join(",") + "\n" +
+        ledgers.map(l => `${l.id},"${l.client_name}",${l.itinerary_id},${l.total_amount},${l.paid_amount},${l.balance_due},${l.status},"${l.payment_method}","${l.vendor_split_status}"`).join("\n");
       
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
@@ -164,8 +146,8 @@ export default function LuxuryFinancialsPage() {
             </button>
             <button
               onClick={handleExport}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-6 py-3 bg-amber-400 hover:bg-amber-300 text-stone-950 font-serif font-bold text-xs uppercase tracking-widest rounded-2xl shadow-xl transition-all cursor-pointer"
+              disabled={isExporting || ledgers.length === 0}
+              className="flex items-center gap-2 px-6 py-3 bg-amber-400 hover:bg-amber-300 text-stone-950 font-serif font-bold text-xs uppercase tracking-widest rounded-2xl shadow-xl transition-all cursor-pointer disabled:opacity-50"
             >
               <Download size={16} />
               <span>{isExporting ? 'Generating...' : 'Export Audit Report'}</span>
@@ -180,7 +162,7 @@ export default function LuxuryFinancialsPage() {
             <p className="text-xs font-serif uppercase tracking-widest text-stone-400">Total Pipeline Revenue</p>
             <p className="text-3xl font-serif font-extrabold text-stone-100 mt-2">${totalRevenue.toLocaleString()}</p>
             <div className="mt-4 flex items-center gap-1.5 text-[10px] font-serif uppercase tracking-wider text-emerald-400 font-bold">
-              <TrendingUp size={14} /> <span>100% Verified Bookings</span>
+              <TrendingUp size={14} /> <span>Live Supabase Records</span>
             </div>
           </div>
 
@@ -271,8 +253,8 @@ export default function LuxuryFinancialsPage() {
                         <span>{ledger.itinerary_id}</span>
                       </div>
                     </td>
-                    <td className="p-5 font-extrabold text-stone-100">${ledger.total_amount.toLocaleString()}</td>
-                    <td className="p-5 font-bold text-rose-400">${ledger.balance_due.toLocaleString()}</td>
+                    <td className="p-5 font-extrabold text-stone-100">${(ledger.total_amount || 0).toLocaleString()}</td>
+                    <td className="p-5 font-bold text-rose-400">${(ledger.balance_due || 0).toLocaleString()}</td>
                     <td className="p-5">
                       <div className="space-y-1">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm ${
@@ -287,7 +269,7 @@ export default function LuxuryFinancialsPage() {
                     </td>
                     <td className="p-5">
                       <div className="text-[11px] text-stone-300 bg-stone-950 p-2.5 rounded-xl border border-amber-500/10 font-mono">
-                        {ledger.vendor_split_status}
+                        {ledger.vendor_split_status || 'Unassigned'}
                       </div>
                     </td>
                     <td className="p-5 text-right">
@@ -301,7 +283,14 @@ export default function LuxuryFinancialsPage() {
                 {filteredLedgers.length === 0 && !loading && (
                   <tr>
                     <td colSpan={7} className="p-16 text-center text-stone-500 font-serif">
-                      No financial ledgers match your search criteria.
+                      No financial ledgers found in Supabase.
+                    </td>
+                  </tr>
+                )}
+                {loading && (
+                  <tr>
+                    <td colSpan={7} className="p-16 text-center text-stone-400 font-serif animate-pulse">
+                      Loading financial ledgers from Supabase...
                     </td>
                   </tr>
                 )}

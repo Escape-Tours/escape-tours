@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, ChevronDown, Wand2, User, Store, Gift, LogOut, ShieldCheck, Truck } from "lucide-react";
+import { Menu, X, ChevronDown, Wand2, User, Store, Gift, LogOut, ShieldCheck, Truck, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createBrowserClient } from "@supabase/ssr";
 
@@ -67,7 +67,7 @@ export function Navigation() {
             </Link>
 
             {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-3 xl:gap-4">
               <Link href="/" className={navLinkClass}>Home</Link>
               <Link href="/about" className={navLinkClass}>About</Link>
 
@@ -86,13 +86,18 @@ export function Navigation() {
               </div>
 
               {/* Itinerary Builder */}
-              <Link href="/itinerary-builder" className="flex items-center gap-2 bg-[#d97706]/10 text-[#d97706] px-3.5 py-2 rounded-full font-bold text-xs hover:bg-[#d97706] hover:text-white transition-all duration-300 border border-[#d97706]/20 shadow-sm">
+              <Link href="/itinerary-builder" className="flex items-center gap-2 bg-[#d97706]/10 text-[#d97706] px-3 py-2 rounded-full font-bold text-xs hover:bg-[#d97706] hover:text-white transition-all duration-300 border border-[#d97706]/20 shadow-sm">
                 <Wand2 size={15} />
                 BUILDER
               </Link>
 
               <Link href="/packages" className={navLinkClass}>Packages</Link>
               <Link href="/hotels" className={navLinkClass}>Hotels</Link>
+
+              {/* Admin Hub Link (Executive Command Center) */}
+              <Link href="/admin" className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/30 hover:bg-amber-500 hover:text-stone-950 transition-all shadow-sm" title="Admin Hub">
+                <LayoutDashboard size={15} />
+              </Link>
 
               {/* Dynamic User Hub State */}
               {!loading && (
@@ -163,13 +168,13 @@ export function Navigation() {
               </Link>
 
               {/* Driver Portal Link */}
-              <Link href="/driver-portal" className="p-2.5 rounded-xl bg-slate-900 text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-all flex items-center gap-2 px-3.5" title="Driver Portal">
+              <Link href="/driver-portal" className="p-2.5 rounded-xl bg-slate-900 text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-all flex items-center gap-2 px-3" title="Driver Portal">
                 <Truck size={15} />
                 <span className="text-xs font-bold">Driver</span>
               </Link>
 
               {/* Enquire Button Restored to the Far Right */}
-              <Button asChild className="bg-[#41210a] hover:bg-[#2a1606] text-white rounded-xl px-5 py-2 font-bold text-xs shadow-md">
+              <Button asChild className="bg-[#41210a] hover:bg-[#2a1606] text-white rounded-xl px-4 py-2 font-bold text-xs shadow-md">
                 <Link href="/contact">ENQUIRE</Link>
               </Button>
             </div>
@@ -201,6 +206,9 @@ export function Navigation() {
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
                 <Link href="/itinerary-builder" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-50 text-[#d97706] font-bold text-xs">
                   <Wand2 size={14} /> Builder
+                </Link>
+                <Link href="/admin" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-amber-500/10 text-amber-600 font-bold text-xs border border-amber-500/30">
+                  <LayoutDashboard size={14} /> Admin Hub
                 </Link>
                 <Link href="/user-hub" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-900 text-amber-300 font-bold text-xs">
                   <User size={14} /> User Hub

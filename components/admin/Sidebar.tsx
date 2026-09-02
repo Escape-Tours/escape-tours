@@ -7,6 +7,8 @@ export const Sidebar = () => {
     { name: 'Inventory Health', href: '/admin/inventory/health' },
     { name: 'Vendor Approvals', href: '/admin/vendors' },
     { name: 'User Management', href: '/admin/users' },
+      { name: 'Financials', href: '/admin/financials' },
+      { name: 'Bookings& Payment', href: '/admin/bookings' },
   ];
 
   return (
