@@ -11,3 +11,6 @@ export const supabase = createSupabaseClient<Database>(supabaseUrl, supabaseAnon
 // 2. The Legacy/Factory Export (for 'import { createClient }')
 // This satisfies files that were already calling createClient() as a function
 export const createClient = () => supabase;
+
+// 3. Helper Export for Admin Hub components
+export const getSupabaseClient = () => supabase;

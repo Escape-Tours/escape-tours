@@ -5,6 +5,8 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+export const getSupabaseClient = () => supabase
+
 export async function createBookingRecord(bookingData: {
   package_id: string
   user_id?: string
