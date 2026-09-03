@@ -1,273 +1,393 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { useTaskSync } from '@/lib/hooks/useTaskSync';
+import React, { useState, useEffect } from 'react';
 import { 
-  LayoutGrid, 
-  ChevronRight, 
+  Shield, 
+  Database, 
+  Truck, 
+  Store, 
+  Users, 
+  RefreshCw, 
+  Loader2, 
+  Lock, 
+  DollarSign, 
   Activity, 
-  Compass, 
-  Crown, 
-  Sparkles,
-  DollarSign,
-  Truck,
-  Gift,
-  MessageSquare,
-  RefreshCw,
-  Loader2,
-  Lock,
-  ShieldAlert,
-  ArrowRight,
-  CalendarDays,
-  ShieldCheck,
-  User,
-  Mail,
-  Calendar
+  Calendar, 
+  LogOut,
+  Plus,
+  Trash2,
+  UserCog
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
-interface Profile {
+interface FleetVehicle {
   id: string;
-  full_name?: string | null;
-  name?: string | null;
-  email?: string | null;
-  phone_number?: string | null;
-  passport_number?: string | null;
-  residency_tier?: string | null;
-  role?: string | null;
-  is_admin?: boolean | null;
-  created_at?: string | null;
-  updated_at?: string | null;
+  vehicle_name: string;
+  plate_number: string;
+  station_location: string;
+  status: 'ACTIVE' | 'ON_ROUTE' | 'MAINTENANCE' | 'STANDBY';
+  driver_assigned: string;
+  fuel_status: string;
 }
 
-interface VendorLedger {
+interface VendorContract {
   id: string;
   vendor_name: string;
   service_type: string;
   commission_rate: number;
   balance_payout: number;
-  status: 'PENDING' | 'SETTLED';
-}
-
-interface FleetAsset {
-  id: string;
-  vehicle_code: string;
-  location: string;
-  driver_name: string;
-  status: 'DISPATCHED' | 'MAINTENANCE' | 'STANDBY';
-  drone_auth: string;
-}
-
-interface DigitalOrder {
-  id: string;
-  item_name: string;
-  client_email: string;
-  status: 'QUEUED' | 'DISPATCHED';
+  status: 'PENDING' | 'SETTLED' | 'ACTIVE';
 }
 
 interface BookingRecord {
   id: string;
-  client_name?: string | null;
-  full_name?: string | null;
-  client_email?: string | null;
-  email?: string | null;
-  package_title?: string | null;
-  tour_name?: string | null;
-  travel_date?: string | null;
-  start_date?: string | null;
-  total_price?: number | null;
-  amount?: number | null;
-  status: string;
+  client_name?: string;
+  package_title?: string;
+  total_amount?: number;
+  payment_status?: string;
+  payment_gateway?: string;
   created_at: string;
+  is_draft?: boolean;
+  status?: string;
+}
+
+interface UserRecord {
+  id: string;
+  email?: string;
+  role?: string;
+  created_at?: string;
+  full_name?: string;
+  name?: string;
+}
+
+interface StoreItem {
+  id: string;
+  item_name?: string;
+  title?: string;
+  category: string;
+  stock_count?: number;
+  stock?: number;
+  price: number;
 }
 
 export default function ComprehensiveExecutiveAdmin() {
+  const [passcode, setPasscode] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passcode, setPasscode] = useState("");
-  const [authError, setAuthError] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'fleet' | 'vendors' | 'inventory' | 'users' | 'financials' | 'bookings'>('dashboard');
+  
+  // Real DB state
+  const [fleetVehicles, setFleetVehicles] = useState<FleetVehicle[]>([]);
+  const [fleetLoading, setFleetLoading] = useState(false);
+  const [vendors, setVendors] = useState<VendorContract[]>([]);
+  const [vendorLoading, setVendorLoading] = useState(false);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
+  const [storeLoading, setStoreLoading] = useState(false);
+  const [appUsers, setAppUsers] = useState<UserRecord[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  const [stats, setStats] = useState({ 
+    totalRevenue: 0, 
+    stripeRevenue: 0, 
+    dpoRevenue: 0, 
+    pesapalRevenue: 0, 
+    activeBookings: 0, 
+    fleetCount: 0 
+  });
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // New Fleet Form Modal state
+  const [showAddFleet, setShowAddFleet] = useState(false);
+  const [newFleet, setNewFleet] = useState({
+    vehicle_name: '',
+    plate_number: '',
+    station_location: 'National Parks & Expedition Hub',
+    status: 'ACTIVE' as const,
+    driver_assigned: '',
+    fuel_status: 'Full Tank'
+  });
+
+  const supabase = createClient();
+  const ADMIN_SECRET = 'EscapeAdmin2026!';
 
   useEffect(() => {
-    const authStatus = sessionStorage.getItem("escape_admin_auth");
-    if (authStatus === "true") {
+    const savedAuth = sessionStorage.getItem('escape_executive_auth');
+    if (savedAuth === 'true') {
       setIsAuthenticated(true);
+      fetchAllData();
     }
-    setAuthLoading(false);
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcode === "EscapeAdmin2026!") {
-      sessionStorage.setItem("escape_admin_auth", "true");
+    if (passcode === ADMIN_SECRET) {
       setIsAuthenticated(true);
-      setAuthError(false);
+      sessionStorage.setItem('escape_executive_auth', 'true');
+      fetchAllData();
     } else {
-      setAuthError(true);
-      setPasscode("");
+      alert('Invalid Executive Passcode.');
     }
   };
 
-  const { status: _systemStatus, isLoading } = useTaskSync('system-health');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'users' | 'vendors' | 'fleet' | 'storefront' | 'comms'>('dashboard');
-  
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [vendors, setVendors] = useState<VendorLedger[]>([]);
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
-  const [bookingLoading, setBookingLoading] = useState(false);
-  const [vendorLoading, setVendorLoading] = useState(false);
-  const [userLoading, setUserLoading] = useState(false);
-  
-  const [fleet] = useState<FleetAsset[]>([
-    { id: 'F-01', vehicle_code: 'CRUISER-04 (Mikumi)', location: 'Mikumi Gate', driver_name: 'Charles Geofrey', status: 'DISPATCHED', drone_auth: 'TCAA-AV2-881' },
-    { id: 'F-02', vehicle_code: 'CRUISER-09 (Serengeti)', location: 'Serora Airstrip', driver_name: 'Juma Kassim', status: 'STANDBY', drone_auth: 'TCAA-AV2-902' }
-  ]);
-  const [orders] = useState<DigitalOrder[]>([
-    { id: 'ORD-501', item_name: '$100 PlayStation Network (PSN) Gift Card', client_email: 'alistair@sterling.co.uk', status: 'DISPATCHED' },
-    { id: 'ORD-502', item_name: '$50 PSN Gift Card', client_email: 'genevieve.dupont@gmail.com', status: 'QUEUED' }
-  ]);
-  
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('escape_executive_auth');
+    setPasscode('');
+  };
 
-  const fetchProfiles = async () => {
-    setUserLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.from('profiles' as any).select('*').order('created_at', { ascending: false });
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchFleet(),
+      fetchVendors(),
+      fetchBookings(),
+      fetchStoreItems(),
+      fetchAppUsers()
+    ]);
+  };
 
-    if (!error && data) {
-      setProfiles((data as unknown as Profile[]) || []);
+  const fetchFleet = async () => {
+    setFleetLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('fleet_vehicles' as any)
+        .select('*')
+        .order('vehicle_name', { ascending: true });
+
+      if (error) throw error;
+      const list = (data as unknown as FleetVehicle[]) || [];
+      setFleetVehicles(list);
+      setStats(prev => ({ ...prev, fleetCount: list.length }));
+    } catch (err) {
+      console.error('Error fetching fleet from Supabase:', err);
+      setFleetVehicles([]);
+      setStats(prev => ({ ...prev, fleetCount: 0 }));
+    } finally {
+      setFleetLoading(false);
     }
-    setUserLoading(false);
+  };
+
+  const handleAddFleet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { data, error } = await supabase
+        .from('fleet_vehicles' as any)
+        .insert([newFleet] as any)
+        .select();
+
+      if (error) throw error;
+      if (data) {
+        const inserted = data as unknown as FleetVehicle[];
+        setFleetVehicles(prev => [...prev, inserted[0]]);
+        setStats(prev => ({ ...prev, fleetCount: prev.fleetCount + 1 }));
+      }
+      setShowAddFleet(false);
+      setNewFleet({ vehicle_name: '', plate_number: '', station_location: 'National Parks & Expedition Hub', status: 'ACTIVE', driver_assigned: '', fuel_status: 'Full Tank' });
+      fetchFleet();
+    } catch (err: any) {
+      console.error('Error inserting fleet:', err);
+      alert(`Failed to insert fleet vehicle into Supabase: ${err.message || JSON.stringify(err)}`);
+    }
+  };
+
+  const handleDeleteFleet = async (id: string) => {
+    if (!confirm('Are you sure you want to remove this fleet vehicle asset?')) return;
+    try {
+      const { error } = await supabase
+        .from('fleet_vehicles' as any)
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setFleetVehicles(prev => prev.filter(v => v.id !== id));
+      setStats(prev => ({ ...prev, fleetCount: Math.max(0, prev.fleetCount - 1) }));
+    } catch (err: any) {
+      console.error('Error deleting fleet vehicle:', err);
+      alert(`Failed to delete vehicle: ${err.message || JSON.stringify(err)}`);
+    }
   };
 
   const fetchVendors = async () => {
     setVendorLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.from('vendors' as any).select('*').order('vendor_name', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('vendor_contracts' as any)
+        .select('*')
+        .order('vendor_name', { ascending: true });
 
-    if (error) {
-      const { data: altData } = await supabase.from('vendor_partners' as any).select('*');
-      if (altData) {
-        setVendors((altData as any[]).map((v: any) => ({
-          id: v.id || Math.random().toString(),
-          vendor_name: v.vendor_name || v.name || 'Partner Vendor',
-          service_type: v.service_type || v.category || 'Luxury Lodge',
-          commission_rate: v.commission_rate || v.markup || 15,
-          balance_payout: v.balance_payout || v.payout || 2500,
-          status: (v.status || 'PENDING').toUpperCase()
-        })));
-      }
-    } else if (data) {
-      setVendors((data as any[]).map((v: any) => ({
-        id: v.id,
-        vendor_name: v.vendor_name,
-        service_type: v.service_type || 'Lodge / Safari',
-        commission_rate: v.commission_rate ?? 15,
-        balance_payout: v.balance_payout ?? 0,
-        status: (v.status || 'PENDING').toUpperCase()
-      })));
+      if (error) throw error;
+      setVendors((data as unknown as VendorContract[]) || []);
+    } catch (err) {
+      console.error('Error fetching vendors:', err);
+      setVendors([]);
+    } finally {
+      setVendorLoading(false);
     }
-    setVendorLoading(false);
   };
 
   const fetchBookings = async () => {
-    setBookingLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.from('bookings' as any).select('*').order('created_at', { ascending: false });
+    setBookingsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bookings' as any)
+        .select('*')
+        .eq('is_draft', false)
+        .order('created_at', { ascending: false });
 
-    if (error || !data) {
+      if (error) throw error;
+      const records = (data as unknown as BookingRecord[]) || [];
+      setBookings(records);
+
+      let totalRev = 0;
+      let stripeRev = 0;
+      let dpoRev = 0;
+      let pesapalRev = 0;
+
+      records.forEach((b: any) => {
+        const isCompleted = (b.payment_status || '').toUpperCase() === 'COMPLETED' || (b.payment_status || '').toUpperCase() === 'PAID';
+        if (isCompleted) {
+          const amt = Number(b.total_amount) || 0;
+          totalRev += amt;
+          const gateway = (b.payment_gateway || '').toLowerCase();
+          if (gateway.includes('stripe')) stripeRev += amt;
+          else if (gateway.includes('dpo')) dpoRev += amt;
+          else if (gateway.includes('pesapal') || gateway.includes('pesa')) pesapalRev += amt;
+          else stripeRev += amt;
+        }
+      });
+
+      setStats(prev => ({
+        ...prev,
+        totalRevenue: totalRev,
+        stripeRevenue: stripeRev,
+        dpoRevenue: dpoRev,
+        pesapalRevenue: pesapalRev,
+        activeBookings: records.length
+      }));
+    } catch (err) {
+      console.error('Error fetching bookings:', err);
       setBookings([]);
-    } else {
-      setBookings((data as unknown as BookingRecord[]) || []);
+    } finally {
+      setBookingsLoading(false);
     }
-    setBookingLoading(false);
   };
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchProfiles();
-      fetchVendors();
-      fetchBookings();
-    }
-  }, [isAuthenticated]);
+  const fetchStoreItems = async () => {
+    setStoreLoading(true);
+    try {
+      let items: StoreItem[] = [];
+      const { data: storeData } = await supabase.from('store_items' as any).select('*');
+      if (storeData) items = [...(storeData as unknown as StoreItem[])];
 
-  const toggleUserRole = async (id: string, currentRole?: string | null, currentIsAdmin?: boolean | null) => {
+      const { data: hubData } = await supabase.from('storefront_items' as any).select('*');
+      if (hubData) {
+        (hubData as unknown as StoreItem[]).forEach((item: any) => {
+          if (!items.some(i => i.id === item.id)) items.push(item);
+        });
+      }
+
+      setStoreItems(items);
+    } catch (err) {
+      console.error('Error fetching store items:', err);
+      setStoreItems([]);
+    } finally {
+      setStoreLoading(false);
+    }
+  };
+
+  const fetchAppUsers = async () => {
+    setUsersLoading(true);
+    try {
+      let { data, error } = await supabase
+        .from('user_profiles' as any)
+        .select('*');
+
+      if (error || !data || data.length === 0) {
+        const { data: altData } = await supabase
+          .from('profiles' as any)
+          .select('*');
+        if (altData && altData.length > 0) {
+          data = altData;
+        }
+      }
+
+      setAppUsers((data as unknown as UserRecord[]) || []);
+    } catch (err) {
+      console.error('Error fetching profiles/users:', err);
+      setAppUsers([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const updateUserRole = async (userId: string, newRole: string) => {
+    setActionLoading(userId);
+    try {
+      let { error } = await supabase
+        .from('user_profiles' as any)
+        .update({ role: newRole } as any)
+        .eq('id', userId);
+
+      if (error) {
+        const { error: altError } = await supabase
+          .from('profiles' as any)
+          .update({ role: newRole } as any)
+          .eq('id', userId);
+        if (altError) throw altError;
+      }
+
+      setAppUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+    } catch (err: any) {
+      console.error('Error updating user role:', err);
+      alert(`Failed to update user role in Supabase: ${err.message || JSON.stringify(err)}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const settleVendor = async (id: string) => {
     setActionLoading(id);
-    const supabase = createClient();
-    const newRole = currentRole === 'admin' ? 'client' : 'admin';
-    const newIsAdmin = !currentIsAdmin;
-    
-    const { error: updateError } = await supabase
-      .from('profiles' as any)
-      .update({ role: newRole, is_admin: newIsAdmin })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('vendor_contracts' as any)
+        .update({ status: 'SETTLED', balance_payout: 0 } as any)
+        .eq('id', id);
 
-    if (updateError) {
-      alert('Failed to update user role: ' + updateError.message);
-    } else {
-      setProfiles(profiles.map(u => u.id === id ? { ...u, role: newRole, is_admin: newIsAdmin } : u));
+      if (error) throw error;
+      setVendors(prev => prev.map(v => v.id === id ? { ...v, status: 'SETTLED', balance_payout: 0 } : v));
+    } catch (err) {
+      console.error('Error settling vendor:', err);
+      alert('Failed to update vendor contract status in Supabase.');
+    } finally {
+      setActionLoading(null);
     }
-    setActionLoading(null);
   };
-
-  const settleVendor = async (vendorId: string) => {
-    setActionLoading(vendorId);
-    const supabase = createClient();
-
-    await supabase.from('vendors' as any).update({ status: 'SETTLED', balance_payout: 0 }).eq('id', vendorId);
-    await supabase.from('vendor_partners' as any).update({ status: 'SETTLED', balance_payout: 0 }).eq('id', vendorId);
-
-    setVendors(vendors.map(v => v.id === vendorId ? { ...v, status: 'SETTLED', balance_payout: 0 } : v));
-    setActionLoading(null);
-  };
-
-  const updateBookingStatus = async (bookingId: string, newStatus: string) => {
-    setActionLoading(bookingId);
-    const supabase = createClient();
-    
-    await supabase.from('bookings' as any).update({ status: newStatus }).eq('id', bookingId);
-    setBookings(bookings.map(b => b.id === bookingId ? { ...b, status: newStatus } : b));
-    setActionLoading(null);
-  };
-
-  if (authLoading) return null;
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-amber-300" />
-          
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
+      <div className="min-h-screen bg-stone-950 flex items-center justify-center p-4">
+        <div className="bg-stone-900/90 border border-amber-500/35 rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl backdrop-blur-xl">
+          <div className="flex flex-col items-center mb-6">
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 mb-4">
               <Lock size={28} />
             </div>
+            <h1 className="font-serif font-extrabold text-xl text-stone-100 tracking-wider uppercase">Executive Gateway</h1>
+            <p className="text-xs text-stone-400 font-serif mt-1">Enter clearance passcode to access live Supabase admin operations.</p>
           </div>
-
-          <div className="text-center mb-8">
-            <h1 className="text-xl font-black text-white uppercase tracking-wider mb-2">Executive Access</h1>
-            <p className="text-xs text-slate-400">Restricted Command Center. Enter your authorization credentials to proceed.</p>
-          </div>
-
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <input
-                type="password"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                placeholder="Enter Admin Passcode..."
-                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-amber-300 placeholder-slate-600 rounded-xl px-4 py-3 text-sm outline-none transition-all shadow-inner"
-                autoFocus
-              />
-              {authError && (
-                <p className="text-[11px] text-red-400 mt-2 flex items-center gap-1 font-medium">
-                  <ShieldAlert size={12} /> Invalid executive passcode. Access denied.
-                </p>
-              )}
-            </div>
-
-            <button type="submit" className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer">
-              <span>Authenticate Access</span>
-              <ArrowRight size={14} />
+            <input
+              type="password"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value)}
+              placeholder="Enter Passcode..."
+              className="w-full bg-stone-950 border border-stone-800 rounded-xl px-4 py-3 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-500 transition"
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-stone-950 font-serif font-bold text-xs uppercase tracking-widest rounded-xl transition cursor-pointer shadow-lg shadow-amber-500/20"
+            >
+              Authenticate Session
             </button>
           </form>
         </div>
@@ -276,310 +396,258 @@ export default function ComprehensiveExecutiveAdmin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-zinc-950 text-stone-100 p-4 md:p-8 selection:bg-amber-400 selection:text-stone-950">
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Luxury Header with Global Status & Navigation Hub */}
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-stone-900/80 p-6 sm:p-8 rounded-[2.5rem] border border-amber-500/20 backdrop-blur-xl shadow-2xl">
-          <div className="flex items-center gap-4">
-            <div className="p-3.5 bg-gradient-to-br from-amber-400/20 to-amber-600/10 border border-amber-400/40 rounded-2xl shadow-inner">
-              <Compass size={32} className="text-amber-400 animate-pulse" />
+    <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col md:flex-row">
+      <aside className="w-full md:w-72 bg-stone-900/60 border-r border-amber-500/10 p-6 flex flex-col justify-between shrink-0">
+        <div className="space-y-8">
+          <div className="flex items-center gap-3 px-2">
+            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+              <Shield size={20} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-serif uppercase tracking-[0.3em] text-amber-400 font-semibold">Escape Tours & Safaris</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-[9px] font-serif text-amber-300 uppercase tracking-widest flex items-center gap-1">
-                  <Crown size={10} /> Ultimate Executive Suite
-                </span>
-              </div>
-              <h1 className="text-3xl font-serif font-bold text-stone-100 tracking-wide mt-1">Unified Command Center</h1>
+              <h2 className="font-serif font-extrabold text-sm text-stone-100 uppercase tracking-widest">Escape Tours</h2>
+              <p className="text-[10px] text-amber-400 font-mono">Executive Admin v2.6</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2.5 bg-stone-950 border border-amber-500/30 px-4 py-2.5 rounded-2xl shadow-inner">
-              <span className={`h-2.5 w-2.5 rounded-full ${isLoading ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
-              <span className="text-xs font-serif uppercase tracking-widest text-stone-300">
-                System {isLoading ? 'Syncing...' : 'Fully Operational'}
-              </span>
-            </div>
+          <nav className="space-y-1">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: Activity },
+              { id: 'fleet', label: 'Fleet Grid', icon: Truck },
+              { id: 'vendors', label: 'Vendor Approvals', icon: Database },
+              { id: 'inventory', label: 'Inventory Health', icon: Store },
+              { id: 'users', label: 'User Management', icon: Users },
+              { id: 'financials', label: 'Financials', icon: DollarSign },
+              { id: 'bookings', label: 'Bookings & Payment', icon: Calendar },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as any)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-serif font-bold uppercase tracking-wider transition cursor-pointer ${
+                    isActive 
+                      ? 'bg-amber-500 text-stone-950 shadow-lg shadow-amber-500/20' 
+                      : 'text-stone-300 hover:bg-stone-800/60 hover:text-amber-400'
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="pt-6 border-t border-stone-800/60">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-2xl text-xs font-serif font-bold uppercase tracking-wider transition cursor-pointer"
+          >
+            <LogOut size={16} />
+            <span>Terminate Session</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto space-y-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 shadow-xl backdrop-blur-xl">
+          <div>
+            <h1 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">
+              {activeTab === 'dashboard' && 'Executive Control Hub'}
+              {activeTab === 'fleet' && 'Expedition Fleet & Transport Matrix'}
+              {activeTab === 'vendors' && 'Vendor Approvals & Contracts'}
+              {activeTab === 'inventory' && 'Digital Storefront & Inventory Health'}
+              {activeTab === 'users' && 'User & Client Role Management'}
+              {activeTab === 'financials' && 'Revenue & Stripe/DPO Ledgers'}
+              {activeTab === 'bookings' && 'Live Bookings & Payment Gateway'}
+            </h1>
+            <p className="text-xs text-stone-400 font-serif mt-1">Live Supabase synchronization for Escape Tours operations.</p>
           </div>
+          <button 
+            onClick={fetchAllData}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-400 hover:text-stone-950 text-amber-300 text-xs font-serif font-bold uppercase tracking-wider rounded-xl border border-amber-500/30 transition cursor-pointer"
+          >
+            <RefreshCw size={14} className={fleetLoading || vendorLoading || bookingsLoading || storeLoading || usersLoading ? 'animate-spin' : ''} />
+            <span>Sync Live Database</span>
+          </button>
         </div>
 
-        {/* Tab Selection Bar */}
-        <div className="flex overflow-x-auto gap-2 p-2 bg-stone-900/90 rounded-2xl border border-amber-500/20 scrollbar-none">
-          {[
-            { id: 'dashboard', label: 'Overview', icon: <LayoutGrid size={14} /> },
-            { id: 'bookings', label: 'Bookings Manager', icon: <CalendarDays size={14} /> },
-            { id: 'users', label: 'User Management', icon: <Activity size={14} /> },
-            { id: 'vendors', label: 'Vendor Rate Matrix', icon: <DollarSign size={14} /> },
-            { id: 'fleet', label: 'Fleet & Drones', icon: <Truck size={14} /> },
-            { id: 'storefront', label: 'Storefront & PSN', icon: <Gift size={14} /> },
-            { id: 'comms', label: 'Comms & WhatsApp', icon: <MessageSquare size={14} /> },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl font-serif font-bold text-xs uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-amber-400 text-stone-950 shadow-lg scale-[1.02]'
-                  : 'text-stone-400 hover:text-stone-200 bg-stone-950/40 hover:bg-stone-800/60'
-              }`}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* TAB 1: OVERVIEW DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div onClick={() => setActiveTab('bookings')} className="bg-stone-900/90 border border-amber-500/20 p-6 rounded-2xl cursor-pointer hover:border-amber-400 transition-all shadow-xl">
-                <span className="text-xs font-serif text-stone-400 uppercase tracking-widest">Active Bookings</span>
-                <p className="text-2xl font-serif font-bold text-stone-100 mt-2">{bookings.length}</p>
-                <span className="text-[10px] text-amber-400 mt-1 block uppercase tracking-wider">Manage Itineraries</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 space-y-3">
+                <div className="flex justify-between items-center text-amber-400">
+                  <span className="text-xs font-serif uppercase tracking-widest">Active Bookings</span>
+                  <Calendar size={18} />
+                </div>
+                <div className="text-3xl font-serif font-extrabold text-stone-100">{stats.activeBookings}</div>
+                <p className="text-xs text-stone-400 font-serif">Verified safaris & completed itineraries</p>
               </div>
-              <div onClick={() => setActiveTab('users')} className="bg-stone-900/90 border border-amber-500/20 p-6 rounded-2xl cursor-pointer hover:border-amber-400 transition-all shadow-xl">
-                <span className="text-xs font-serif text-stone-400 uppercase tracking-widest">Registered Profiles</span>
-                <p className="text-2xl font-serif font-bold text-stone-100 mt-2">{profiles.length}</p>
-                <span className="text-[10px] text-amber-400 mt-1 block uppercase tracking-wider">Live DB Sync</span>
+              <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 space-y-3">
+                <div className="flex justify-between items-center text-amber-400">
+                  <span className="text-xs font-serif uppercase tracking-widest">Total Revenue (YTD)</span>
+                  <DollarSign size={18} />
+                </div>
+                <div className="text-3xl font-serif font-extrabold text-stone-100">${stats.totalRevenue.toLocaleString()}</div>
+                <p className="text-xs text-stone-400 font-serif">Live completed gateway receipts</p>
               </div>
-              <div onClick={() => setActiveTab('vendors')} className="bg-stone-900/90 border border-amber-500/20 p-6 rounded-2xl cursor-pointer hover:border-amber-400 transition-all shadow-xl">
-                <span className="text-xs font-serif text-stone-400 uppercase tracking-widest">Vendor Payouts Pending</span>
-                <p className="text-2xl font-serif font-bold text-amber-400 mt-2">${vendors.reduce((a,c)=>a+c.balance_payout,0).toLocaleString()}</p>
-                <span className="text-[10px] text-amber-400 mt-1 block uppercase tracking-wider">Audit Matrix</span>
-              </div>
-              <div onClick={() => setActiveTab('fleet')} className="bg-stone-900/90 border border-amber-500/20 p-6 rounded-2xl cursor-pointer hover:border-amber-400 transition-all shadow-xl">
-                <span className="text-xs font-serif text-stone-400 uppercase tracking-widest">Fleet & Drones Active</span>
-                <p className="text-2xl font-serif font-bold text-emerald-400 mt-2">{fleet.length}</p>
-                <span className="text-[10px] text-emerald-400 mt-1 block uppercase tracking-wider">Dispatch Hub</span>
+              <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 space-y-3">
+                <div className="flex justify-between items-center text-amber-400">
+                  <span className="text-xs font-serif uppercase tracking-widest">Expedition Fleet Assets</span>
+                  <Truck size={18} />
+                </div>
+                <div className="text-3xl font-serif font-extrabold text-emerald-400">{stats.fleetCount} Active</div>
+                <p className="text-xs text-stone-400 font-serif">Safari vehicles deployed & serviced</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-stone-900/90 rounded-[2.5rem] border border-amber-500/20 shadow-2xl overflow-hidden backdrop-blur-xl p-6 sm:p-8">
-                <h3 className="font-serif font-bold text-lg text-stone-100 uppercase tracking-widest mb-4">Recent Bookings Stream</h3>
-                <div className="divide-y divide-stone-800/60">
-                  {bookings.slice(0, 4).map((b) => (
-                    <div key={b.id} className="py-4 flex justify-between items-center">
+            <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-4">
+              <h2 className="font-serif font-extrabold text-lg text-stone-100 uppercase tracking-widest">Quick Operations Shortcuts</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <button onClick={() => setActiveTab('fleet')} className="p-4 bg-stone-950/60 hover:bg-stone-800/80 border border-stone-800 rounded-2xl text-left transition cursor-pointer space-y-2">
+                  <Truck className="text-amber-400" size={20} />
+                  <div className="font-serif font-bold text-sm text-stone-100">Manage Fleet</div>
+                  <p className="text-[11px] text-stone-400">View license plates, drivers, and park stations.</p>
+                </button>
+                <button onClick={() => setActiveTab('vendors')} className="p-4 bg-stone-950/60 hover:bg-stone-800/80 border border-stone-800 rounded-2xl text-left transition cursor-pointer space-y-2">
+                  <Database className="text-amber-400" size={20} />
+                  <div className="font-serif font-bold text-sm text-stone-100">Vendor Payouts</div>
+                  <p className="text-[11px] text-stone-400">Settle commission balances with lodges.</p>
+                </button>
+                <button onClick={() => setActiveTab('bookings')} className="p-4 bg-stone-950/60 hover:bg-stone-800/80 border border-stone-800 rounded-2xl text-left transition cursor-pointer space-y-2">
+                  <Calendar className="text-amber-400" size={20} />
+                  <div className="font-serif font-bold text-sm text-stone-100">Review Bookings</div>
+                  <p className="text-[11px] text-stone-400">Inspect live completed itineraries and payments.</p>
+                </button>
+                <button onClick={() => setActiveTab('inventory')} className="p-4 bg-stone-950/60 hover:bg-stone-800/80 border border-stone-800 rounded-2xl text-left transition cursor-pointer space-y-2">
+                  <Store className="text-amber-400" size={20} />
+                  <div className="font-serif font-bold text-sm text-stone-100">Storefront Items</div>
+                  <p className="text-[11px] text-stone-400">PSN gift cards & digital lifestyle inventory.</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'fleet' && (
+          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Expedition Fleet & Transport Assets</h2>
+                <p className="text-xs text-stone-400 font-serif mt-1">Real-time national park and safari expedition vehicle assignments.</p>
+              </div>
+              <button 
+                onClick={() => setShowAddFleet(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-serif font-bold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-lg shadow-amber-500/20"
+              >
+                <Plus size={16} />
+                <span>Add Fleet Vehicle</span>
+              </button>
+            </div>
+
+            {showAddFleet && (
+              <form onSubmit={handleAddFleet} className="p-6 bg-stone-950/80 border border-amber-500/30 rounded-2xl space-y-4">
+                <h3 className="font-serif font-bold text-sm text-amber-400 uppercase tracking-wider">Register New Safari Vehicle</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Vehicle Name (e.g. Land Cruiser V8)"
+                    required
+                    value={newFleet.vehicle_name}
+                    onChange={e => setNewFleet({...newFleet, vehicle_name: e.target.value})}
+                    className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-xs text-stone-100 font-serif focus:border-amber-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Plate Number (e.g. T 452 ABC)"
+                    required
+                    value={newFleet.plate_number}
+                    onChange={e => setNewFleet({...newFleet, plate_number: e.target.value})}
+                    className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-xs text-stone-100 font-mono focus:border-amber-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Station Location"
+                    required
+                    value={newFleet.station_location}
+                    onChange={e => setNewFleet({...newFleet, station_location: e.target.value})}
+                    className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-xs text-stone-100 font-serif focus:border-amber-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Assigned Driver Name"
+                    required
+                    value={newFleet.driver_assigned}
+                    onChange={e => setNewFleet({...newFleet, driver_assigned: e.target.value})}
+                    className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-2.5 text-xs text-stone-100 font-serif focus:border-amber-500 outline-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setShowAddFleet(false)} className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs font-serif uppercase">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-xl text-xs font-serif uppercase">Save Vehicle</button>
+                </div>
+              </form>
+            )}
+
+            {fleetLoading ? (
+              <div className="flex justify-center items-center py-16 text-amber-400">
+                <Loader2 className="animate-spin mr-2" size={24} />
+                <span className="font-serif text-sm tracking-widest uppercase">Querying Fleet Database...</span>
+              </div>
+            ) : fleetVehicles.length === 0 ? (
+              <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
+                <p className="font-serif text-stone-400 text-sm">No fleet vehicles recorded in Supabase.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {fleetVehicles.map((vehicle) => (
+                  <div key={vehicle.id} className="relative p-6 bg-stone-950/60 rounded-2xl border border-stone-800/80 space-y-4 shadow-lg hover:border-amber-500/40 transition">
+                    <button 
+                      onClick={() => handleDeleteFleet(vehicle.id)}
+                      title="Remove Vehicle"
+                      className="absolute top-4 right-4 p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl transition cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+
+                    <div className="flex justify-between items-start pr-8">
                       <div>
-                        <p className="font-serif font-bold text-stone-200">{b.client_name || b.full_name || 'Guest'} — <span className="text-amber-400">{b.package_title || b.tour_name || 'Safari'}</span></p>
-                        <p className="text-xs text-stone-400 font-serif">Travel Date: {b.travel_date || b.start_date || 'TBD'} | Total: ${(b.total_price || b.amount || 0).toLocaleString()}</p>
+                        <h3 className="font-serif font-bold text-stone-100 text-sm">{vehicle.vehicle_name}</h3>
+                        <p className="text-xs font-mono text-amber-400 mt-0.5">{vehicle.plate_number}</p>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase ${b.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'}`}>
-                        {b.status || 'PENDING'}
+                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                        vehicle.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' :
+                        vehicle.status === 'ON_ROUTE' ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' :
+                        'bg-stone-800 text-stone-400 border border-stone-700'
+                      }`}>
+                        {vehicle.status}
                       </span>
                     </div>
-                  ))}
-                  {bookings.length === 0 && <p className="text-stone-500 font-serif text-sm py-6">No recent bookings recorded.</p>}
-                </div>
-              </div>
 
-              <div className="bg-gradient-to-br from-stone-900 via-stone-950 to-zinc-950 text-stone-100 rounded-[2.5rem] border border-amber-500/30 p-6 sm:p-8 shadow-2xl flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Sparkles className="text-amber-400" size={18} />
-                    <h3 className="font-serif font-bold text-base uppercase tracking-widest text-stone-100">Executive Shortcuts</h3>
+                    <div className="space-y-2 text-xs font-serif text-stone-300 pt-2 border-t border-stone-800/60">
+                      <div className="flex justify-between">
+                        <span className="text-stone-400">Station / Location:</span>
+                        <span className="font-bold text-stone-100">{vehicle.station_location}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-stone-400">Assigned Driver:</span>
+                        <span className="font-bold text-stone-100">{vehicle.driver_assigned || 'Unassigned'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-stone-400">Fuel Status:</span>
+                        <span className="font-mono text-amber-400">{vehicle.fuel_status}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    <button onClick={() => setActiveTab('bookings')} className="w-full text-left bg-stone-900/90 border border-amber-500/20 p-3.5 rounded-2xl font-serif font-bold text-xs uppercase tracking-wider hover:border-amber-400 transition-all flex items-center justify-between text-stone-200 cursor-pointer">
-                      <span>Manage All Bookings</span>
-                      <ChevronRight size={14} className="text-amber-400" />
-                    </button>
-                    <button onClick={() => setActiveTab('users')} className="w-full text-left bg-stone-900/90 border border-amber-500/20 p-3.5 rounded-2xl font-serif font-bold text-xs uppercase tracking-wider hover:border-amber-400 transition-all flex items-center justify-between text-stone-200 cursor-pointer">
-                      <span>Manage User Hub</span>
-                      <ChevronRight size={14} className="text-amber-400" />
-                    </button>
-                    <button onClick={() => setActiveTab('vendors')} className="w-full text-left bg-stone-900/90 border border-amber-500/20 p-3.5 rounded-2xl font-serif font-bold text-xs uppercase tracking-wider hover:border-amber-400 transition-all flex items-center justify-between text-stone-200 cursor-pointer">
-                      <span>Manage Supplier Margins</span>
-                      <ChevronRight size={14} className="text-amber-400" />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-6 pt-4 border-t border-amber-500/20 text-[10px] font-serif uppercase tracking-[0.2em] text-amber-400/70 text-center">
-                  Escape Tours & Safaris • Millennium Towers
-                </div>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
 
-        {/* TAB 2: BOOKINGS MANAGER */}
-        {activeTab === 'bookings' && (
-          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Bookings & Itinerary Manager</h2>
-                <p className="text-xs text-stone-400 font-serif mt-1">Direct query results from your Supabase <code className="text-amber-400 font-mono">bookings</code> table.</p>
-              </div>
-              <button onClick={fetchBookings} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-400 hover:text-stone-950 text-amber-300 text-xs font-serif font-bold uppercase tracking-wider rounded-xl border border-amber-500/30 transition cursor-pointer">
-                <RefreshCw size={14} className={bookingLoading ? 'animate-spin' : ''} />
-                <span>Sync Live DB</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              {bookingLoading ? (
-                <div className="flex justify-center items-center py-16 text-amber-400">
-                  <Loader2 className="animate-spin mr-2" size={24} />
-                  <span className="font-serif text-sm tracking-widest uppercase">Querying Supabase Bookings...</span>
-                </div>
-              ) : bookings.length === 0 ? (
-                <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
-                  <p className="font-serif text-stone-400 text-sm">No bookings found in the active database table.</p>
-                  <p className="text-[10px] font-mono text-amber-400 mt-1">Verify table schema `bookings` in your Supabase SQL editor.</p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
-                      <th className="p-4">Booking ID</th>
-                      <th className="p-4">Client Details</th>
-                      <th className="p-4">Package / Itinerary</th>
-                      <th className="p-4">Travel Date</th>
-                      <th className="p-4">Total Amount</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-800/60 text-xs font-serif">
-                    {bookings.map((b) => {
-                      const clientName = b.client_name || b.full_name || 'Valued Guest';
-                      const clientEmail = b.client_email || b.email || 'N/A';
-                      const packageTitle = b.package_title || b.tour_name || 'Custom Safari Itinerary';
-                      const travelDate = b.travel_date || b.start_date || 'TBD';
-                      const totalPrice = b.total_price || b.amount || 0;
-                      const status = (b.status || 'PENDING').toUpperCase();
-
-                      return (
-                        <tr key={b.id} className="hover:bg-stone-800/40">
-                          <td className="p-4 font-mono text-amber-400 font-bold">{b.id.slice(0, 8)}...</td>
-                          <td className="p-4">
-                            <p className="font-bold text-stone-100 flex items-center gap-1.5"><User size={12} className="text-amber-400" />{clientName}</p>
-                            <p className="text-[11px] text-stone-400 flex items-center gap-1.5 mt-0.5"><Mail size={12} className="text-stone-500" />{clientEmail}</p>
-                          </td>
-                          <td className="p-4 text-stone-200 font-bold">{packageTitle}</td>
-                          <td className="p-4 font-mono text-stone-300 flex items-center gap-1.5 pt-5"><CalendarDays size={13} className="text-amber-400" />{travelDate}</td>
-                          <td className="p-4 font-mono font-extrabold text-stone-100">${Number(totalPrice).toLocaleString()}</td>
-                          <td className="p-4">
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                              status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' :
-                              status === 'CANCELLED' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' :
-                              'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                            }`}>
-                              {status}
-                            </span>
-                          </td>
-                          <td className="p-4 text-right space-x-1.5">
-                            <button 
-                              disabled={actionLoading === b.id}
-                              onClick={() => updateBookingStatus(b.id, 'CONFIRMED')}
-                              className="px-3 py-1.5 bg-stone-950 hover:bg-stone-800 text-emerald-400 rounded-xl text-[10px] uppercase font-bold border border-emerald-500/30 transition cursor-pointer"
-                            >
-                              Confirm
-                            </button>
-                            <button 
-                              disabled={actionLoading === b.id}
-                              onClick={() => updateBookingStatus(b.id, 'CANCELLED')}
-                              className="px-3 py-1.5 bg-stone-950 hover:bg-stone-800 text-rose-400 rounded-xl text-[10px] uppercase font-bold border border-rose-500/30 transition cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: USER MANAGEMENT */}
-        {activeTab === 'users' && (
-          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">User Management & Profiles</h2>
-                <p className="text-xs text-stone-400 font-serif mt-1">Direct query results from your Supabase <code className="text-amber-400 font-mono">profiles</code> table.</p>
-              </div>
-              <button onClick={fetchProfiles} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-400 hover:text-stone-950 text-amber-300 text-xs font-serif font-bold uppercase tracking-wider rounded-xl border border-amber-500/30 transition cursor-pointer">
-                <RefreshCw size={14} className={userLoading ? 'animate-spin' : ''} />
-                <span>Sync Live DB</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              {userLoading ? (
-                <div className="flex justify-center items-center py-16 text-amber-400">
-                  <Loader2 className="animate-spin mr-2" size={24} />
-                  <span className="font-serif text-sm tracking-widest uppercase">Querying Supabase Profiles...</span>
-                </div>
-              ) : profiles.length === 0 ? (
-                <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
-                  <p className="font-serif text-stone-400 text-sm">No user profiles found in the database.</p>
-                  <p className="text-[10px] font-mono text-amber-400 mt-1">Verify table schema `profiles` in your Supabase SQL editor.</p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
-                      <th className="p-4">User ID</th>
-                      <th className="p-4">Profile Details</th>
-                      <th className="p-4">Role / Access</th>
-                      <th className="p-4">Joined Date</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-800/60 text-xs font-serif">
-                    {profiles.map((u) => {
-                      const userName = u.full_name || u.name || 'Platform User';
-                      const userEmail = u.email || 'No email provided';
-                      const userRole = (u.role || (u.is_admin ? 'admin' : 'client')).toUpperCase();
-                      const joinedDate = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A';
-
-                      return (
-                        <tr key={u.id} className="hover:bg-stone-800/40">
-                          <td className="p-4 font-mono text-amber-400 font-bold">{u.id.slice(0, 8)}...</td>
-                          <td className="p-4">
-                            <p className="font-bold text-stone-100 flex items-center gap-1.5"><User size={12} className="text-amber-400" />{userName}</p>
-                            <p className="text-[11px] text-stone-400 flex items-center gap-1.5 mt-0.5"><Mail size={12} className="text-stone-500" />{userEmail}</p>
-                          </td>
-                          <td className="p-4">
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1 ${
-                              userRole === 'ADMIN' ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' :
-                              'bg-stone-800 text-stone-300 border border-stone-700'
-                            }`}>
-                              {userRole === 'ADMIN' ? <ShieldCheck size={10} className="text-amber-400" /> : <Sparkles size={10} className="text-stone-400" />}
-                              {userRole}
-                            </span>
-                          </td>
-                          <td className="p-4 font-mono text-stone-300 flex items-center gap-1.5 pt-5"><Calendar size={13} className="text-amber-400" />{joinedDate}</td>
-                          <td className="p-4 text-right">
-                            <button 
-                              disabled={actionLoading === u.id}
-                              onClick={() => toggleUserRole(u.id, u.role, u.is_admin)}
-                              className="px-3 py-1.5 bg-stone-950 hover:bg-stone-800 text-amber-400 rounded-xl text-[10px] uppercase font-bold border border-amber-500/30 transition cursor-pointer"
-                            >
-                              {actionLoading === u.id ? <Loader2 size={12} className="animate-spin inline" /> : `Make ${userRole === 'ADMIN' ? 'Client' : 'Admin'}`}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: VENDOR RATE & COMMISSION MATRIX */}
         {activeTab === 'vendors' && (
-          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6">
+          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-6 shadow-2xl backdrop-blur-xl">
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Vendor Rate & Commission Matrix</h2>
@@ -595,11 +663,11 @@ export default function ComprehensiveExecutiveAdmin() {
               {vendorLoading ? (
                 <div className="flex justify-center items-center py-16 text-amber-400">
                   <Loader2 className="animate-spin mr-2" size={24} />
-                  <span className="font-serif text-sm tracking-widest uppercase">Querying Supabase Vendors...</span>
+                  <span className="font-serif text-sm tracking-widest uppercase">Querying Vendor Ledgers...</span>
                 </div>
               ) : vendors.length === 0 ? (
                 <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
-                  <p className="font-serif text-stone-400 text-sm">No vendor ledger records found.</p>
+                  <p className="font-serif text-stone-400 text-sm">No active vendor contracts found in Supabase.</p>
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
@@ -607,7 +675,7 @@ export default function ComprehensiveExecutiveAdmin() {
                     <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
                       <th className="p-4">Vendor Name</th>
                       <th className="p-4">Service Type</th>
-                      <th className="p-4">Commission %</th>
+                      <th className="p-4">Commission Rate</th>
                       <th className="p-4">Balance Payout</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Settlement</th>
@@ -619,20 +687,24 @@ export default function ComprehensiveExecutiveAdmin() {
                         <td className="p-4 font-bold text-stone-100">{v.vendor_name}</td>
                         <td className="p-4 text-stone-300">{v.service_type}</td>
                         <td className="p-4 font-mono text-amber-400">{v.commission_rate}%</td>
-                        <td className="p-4 font-mono font-bold text-stone-100">${Number(v.balance_payout).toLocaleString()}</td>
+                        <td className="p-4 font-mono font-bold text-stone-100">${v.balance_payout.toLocaleString()}</td>
                         <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${v.status === 'SETTLED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'}`}>
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            v.status === 'SETTLED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                          }`}>
                             {v.status}
                           </span>
                         </td>
                         <td className="p-4 text-right">
-                          <button
-                            disabled={v.status === 'SETTLED' || actionLoading === v.id}
-                            onClick={() => settleVendor(v.id)}
-                            className="px-3 py-1.5 bg-stone-950 hover:bg-stone-800 text-amber-400 disabled:text-stone-600 rounded-xl text-[10px] uppercase font-bold border border-amber-500/30 transition cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            {v.status === 'SETTLED' ? 'Settled' : 'Settle Payout'}
-                          </button>
+                          {v.status !== 'SETTLED' && (
+                            <button
+                              disabled={actionLoading === v.id}
+                              onClick={() => settleVendor(v.id)}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-xl text-[10px] uppercase transition cursor-pointer shadow"
+                            >
+                              {actionLoading === v.id ? 'Processing...' : 'Settle Payout'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -643,92 +715,213 @@ export default function ComprehensiveExecutiveAdmin() {
           </div>
         )}
 
-        {/* TAB 5: FLEET & DRONES */}
-        {activeTab === 'fleet' && (
-          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6">
-            <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Fleet & TCAA Drone Authorizations</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
-                    <th className="p-4">Vehicle ID</th>
-                    <th className="p-4">Cruiser / Asset Code</th>
-                    <th className="p-4">Current Location</th>
-                    <th className="p-4">Assigned Driver</th>
-                    <th className="p-4">TCAA Drone Auth</th>
-                    <th className="p-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-800/60 text-xs font-serif">
-                  {fleet.map((f) => (
-                    <tr key={f.id} className="hover:bg-stone-800/40">
-                      <td className="p-4 font-mono text-amber-400 font-bold">{f.id}</td>
-                      <td className="p-4 font-bold text-stone-100">{f.vehicle_code}</td>
-                      <td className="p-4 text-stone-300">{f.location}</td>
-                      <td className="p-4 text-stone-200">{f.driver_name}</td>
-                      <td className="p-4 font-mono text-amber-300">{f.drone_auth}</td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${f.status === 'DISPATCHED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'}`}>
-                          {f.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 6: STOREFRONT & PSN */}
-        {activeTab === 'storefront' && (
-          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6">
-            <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Digital Storefront & PSN Gift Card Queue</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
-                    <th className="p-4">Order ID</th>
-                    <th className="p-4">Digital Item / Gift Card</th>
-                    <th className="p-4">Client Email</th>
-                    <th className="p-4">Dispatch Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-800/60 text-xs font-serif">
-                  {orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-stone-800/40">
-                      <td className="p-4 font-mono text-amber-400 font-bold">{o.id}</td>
-                      <td className="p-4 font-bold text-stone-100">{o.item_name}</td>
-                      <td className="p-4 font-mono text-stone-300">{o.client_email}</td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${o.status === 'DISPATCHED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'}`}>
-                          {o.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 7: COMMS & WHATSAPP */}
-        {activeTab === 'comms' && (
-          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6">
-            <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Client Communications & WhatsApp Hub</h2>
-            <p className="text-xs text-stone-400 font-serif">Direct WhatsApp Business API bridge and automated itinerary broadcast logs.</p>
-            <div className="bg-stone-950/80 p-6 rounded-2xl border border-amber-500/10 text-center space-y-3">
-              <MessageSquare size={32} className="text-amber-400 mx-auto animate-bounce" />
-              <p className="text-sm font-serif text-stone-200">WhatsApp Business API Gateway connected via Twilio / Meta Cloud.</p>
-              <button onClick={() => alert('Broadcast queue test initiated successfully.')} className="px-5 py-2.5 bg-amber-400 text-stone-950 font-serif font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:bg-amber-300 transition cursor-pointer">
-                Test Broadcast Queue
+        {activeTab === 'inventory' && (
+          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Digital Storefront & Lifestyle Hub Inventory</h2>
+                <p className="text-xs text-stone-400 font-serif mt-1">PSN gift cards, gear, and merchandise stock catalog.</p>
+              </div>
+              <button onClick={fetchStoreItems} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-400 hover:text-stone-950 text-amber-300 text-xs font-serif font-bold uppercase tracking-wider rounded-xl border border-amber-500/30 transition cursor-pointer">
+                <RefreshCw size={14} className={storeLoading ? 'animate-spin' : ''} />
+                <span>Sync Live DB</span>
               </button>
             </div>
+
+            {storeLoading ? (
+              <div className="flex justify-center items-center py-16 text-amber-400">
+                <Loader2 className="animate-spin mr-2" size={24} />
+                <span className="font-serif text-sm tracking-widest uppercase">Querying Storefront Catalog...</span>
+              </div>
+            ) : storeItems.length === 0 ? (
+              <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
+                <p className="font-serif text-stone-400 text-sm">No storefront items found in Supabase.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {storeItems.map((item) => (
+                  <div key={item.id} className="p-6 bg-stone-950/60 rounded-2xl border border-stone-800/80 space-y-3 shadow-lg">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-serif font-bold text-stone-100 text-sm">{item.item_name || item.title || 'Digital Item'}</h3>
+                      <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[9px] font-mono uppercase">
+                        {item.category || 'General'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-stone-800/60 text-xs font-serif">
+                      <span className="text-stone-400">Stock Available:</span>
+                      <span className="font-mono font-bold text-emerald-400">{item.stock_count ?? item.stock ?? 100} units</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-serif">
+                      <span className="text-stone-400">Unit Price:</span>
+                      <span className="font-mono font-bold text-stone-100">${item.price?.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-      </div>
+        {activeTab === 'users' && (
+          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">User & Client Role Management</h2>
+                <p className="text-xs text-stone-400 font-serif mt-1">Manage registered profiles and assign executive, agent, or client roles.</p>
+              </div>
+              <button onClick={fetchAppUsers} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-400 hover:text-stone-950 text-amber-300 text-xs font-serif font-bold uppercase tracking-wider rounded-xl border border-amber-500/30 transition cursor-pointer">
+                <RefreshCw size={14} className={usersLoading ? 'animate-spin' : ''} />
+                <span>Sync Live DB</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              {usersLoading ? (
+                <div className="flex justify-center items-center py-16 text-amber-400">
+                  <Loader2 className="animate-spin mr-2" size={24} />
+                  <span className="font-serif text-sm tracking-widest uppercase">Querying User Database...</span>
+                </div>
+              ) : appUsers.length === 0 ? (
+                <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
+                  <p className="font-serif text-stone-400 text-sm">No user profiles discovered in Supabase.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
+                      <th className="p-4">User Email</th>
+                      <th className="p-4">Full Name</th>
+                      <th className="p-4">Registered Date</th>
+                      <th className="p-4">Current Role</th>
+                      <th className="p-4 text-right">Action / Change Role</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-800/60 text-xs font-serif">
+                    {appUsers.map((u) => (
+                      <tr key={u.id} className="hover:bg-stone-800/40">
+                        <td className="p-4 font-mono font-bold text-stone-100">{u.email || 'No Email Record'}</td>
+                        <td className="p-4 text-stone-300">{u.full_name || u.name || 'Unnamed User'}</td>
+                        <td className="p-4 font-mono text-stone-400">{u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            (u.role || '').toUpperCase() === 'ADMIN' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
+                            (u.role || '').toUpperCase() === 'AGENT' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30' :
+                            'bg-stone-800 text-stone-400 border border-stone-700'
+                          }`}>
+                            {u.role || 'CLIENT'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <select
+                            disabled={actionLoading === u.id}
+                            value={u.role || 'client'}
+                            onChange={(e) => updateUserRole(u.id, e.target.value)}
+                            className="bg-stone-950 border border-stone-800 text-amber-400 font-bold rounded-xl px-3 py-1.5 text-xs outline-none focus:border-amber-500 cursor-pointer"
+                          >
+                            <option value="client">CLIENT</option>
+                            <option value="agent">AGENT</option>
+                            <option value="admin">ADMIN</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'financials' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 space-y-3">
+                <span className="text-xs font-serif uppercase tracking-widest text-amber-400">Stripe Gateway Receipts</span>
+                <div className="text-3xl font-serif font-extrabold text-stone-100">${stats.stripeRevenue.toLocaleString()}</div>
+                <p className="text-xs text-stone-400 font-serif">International Visa/Mastercard payments</p>
+              </div>
+              <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 space-y-3">
+                <span className="text-xs font-serif uppercase tracking-widest text-amber-400">DPO Group Receipts</span>
+                <div className="text-3xl font-serif font-extrabold text-stone-100">${stats.dpoRevenue.toLocaleString()}</div>
+                <p className="text-xs text-stone-400 font-serif">East African regional card processor</p>
+              </div>
+              <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-6 space-y-3">
+                <span className="text-xs font-serif uppercase tracking-widest text-amber-400">PesaPal Gateway Receipts</span>
+                <div className="text-3xl font-serif font-extrabold text-stone-100">${stats.pesapalRevenue.toLocaleString()}</div>
+                <p className="text-xs text-stone-400 font-serif">Mobile money and local bank settlements</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-4">
+              <h2 className="font-serif font-extrabold text-lg text-stone-100 uppercase tracking-widest">Financial Auditing & Gateway Summary</h2>
+              <p className="text-xs text-stone-300 font-serif leading-relaxed">
+                All receipts are securely tracked directly via live Supabase bookings and payment status columns. Gateway payouts settle automatically according to configured vendor commission agreements.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'bookings' && (
+          <div className="bg-stone-900/90 border border-amber-500/20 rounded-[2.5rem] p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="font-serif font-extrabold text-xl text-stone-100 uppercase tracking-widest">Live Bookings & Payment Gateway</h2>
+                <p className="text-xs text-stone-400 font-serif mt-1">Verified safari itineraries and customer payment records.</p>
+              </div>
+              <button onClick={fetchBookings} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 hover:bg-amber-400 hover:text-stone-950 text-amber-300 text-xs font-serif font-bold uppercase tracking-wider rounded-xl border border-amber-500/30 transition cursor-pointer">
+                <RefreshCw size={14} className={bookingsLoading ? 'animate-spin' : ''} />
+                <span>Sync Live DB</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              {bookingsLoading ? (
+                <div className="flex justify-center items-center py-16 text-amber-400">
+                  <Loader2 className="animate-spin mr-2" size={24} />
+                  <span className="font-serif text-sm tracking-widest uppercase">Querying Bookings Database...</span>
+                </div>
+              ) : bookings.length === 0 ? (
+                <div className="text-center py-16 bg-stone-950/60 rounded-2xl border border-amber-500/10">
+                  <p className="font-serif text-stone-400 text-sm">No completed bookings found in Supabase.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-amber-500/20 text-[10px] font-serif font-extrabold uppercase tracking-widest text-amber-400 bg-stone-950/60">
+                      <th className="p-4">Client Name</th>
+                      <th className="p-4">Package / Itinerary</th>
+                      <th className="p-4">Total Amount</th>
+                      <th className="p-4">Payment Status</th>
+                      <th className="p-4">Gateway</th>
+                      <th className="p-4 text-right">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-800/60 text-xs font-serif">
+                    {bookings.map((b) => (
+                      <tr key={b.id} className="hover:bg-stone-800/40">
+                        <td className="p-4 font-bold text-stone-100">{b.client_name || 'Valued Client'}</td>
+                        <td className="p-4 text-stone-300">{b.package_title || 'Custom Safari Expedition'}</td>
+                        <td className="p-4 font-mono text-amber-400">${Number(b.total_amount || 0).toLocaleString()}</td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            (b.payment_status || '').toUpperCase() === 'COMPLETED' || (b.payment_status || '').toUpperCase() === 'PAID'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                          }`}>
+                            {b.payment_status || 'PENDING'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-mono text-stone-300 uppercase">{b.payment_gateway || 'Stripe'}</td>
+                        <td className="p-4 text-right font-mono text-stone-400">{new Date(b.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
