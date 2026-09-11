@@ -29,7 +29,11 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
   if (error || !hotel) notFound();
 
   const safeParse = (val: any) => {
-    try { return typeof val === 'string' ? JSON.parse(val) : (val || {}); } catch { return {}; }
+    try { 
+      if (typeof val === 'string') return JSON.parse(val);
+      if (typeof val === 'object' && val !== null) return val;
+      return {}; 
+    } catch { return {}; }
   };
 
   const prices = safeParse(hotel.room_prices);
@@ -130,28 +134,52 @@ function renderPrice(priceData: unknown): React.ReactNode {
     if (entries.length === 0) return <span className="text-gray-400 italic">Price on request</span>;
 
     return (
-      <div className="space-y-2">
-        {entries.map(([key, val]) => {
-          if (typeof val === 'object' && val !== null) {
+      <div className="space-y-4">
+        {entries.map(([seasonKey, seasonVal]) => {
+          if (typeof seasonVal === 'object' && seasonVal !== null) {
             return (
-              <div key={key} className="space-y-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-400 block">{key} Season</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(val as Record<string, unknown>).map(([subKey, subVal]) => (
-                    <div key={subKey} className="flex justify-between items-center text-sm font-semibold text-gray-700 bg-white p-2 rounded border border-gray-100">
-                      <span className="uppercase text-[10px] text-gray-500">{subKey}:</span>
-                      <span className="text-[#d97706]">${typeof subVal === 'number' ? subVal.toLocaleString() : String(subVal)}</span>
-                    </div>
-                  ))}
+              <div key={seasonKey} className="space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 block border-b pb-1">
+                  {seasonKey} Season
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {Object.entries(seasonVal as Record<string, unknown>).map(([occupancyKey, occupancyVal]) => {
+                    if (typeof occupancyVal === 'object' && occupancyVal !== null) {
+                      return (
+                        <div key={occupancyKey} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm space-y-1">
+                          <span className="text-[10px] font-black tracking-wider uppercase text-gray-400 block">{occupancyKey} Room</span>
+                          <div className="space-y-1 pt-1">
+                            {Object.entries(occupancyVal as Record<string, unknown>).map(([residencyKey, finalPrice]) => (
+                              <div key={residencyKey} className="flex justify-between items-center text-xs">
+                                <span className="text-gray-600 font-medium capitalize">{residencyKey.toLowerCase()}:</span>
+                                <span className="text-[#d97706] font-bold">
+                                  ${typeof finalPrice === 'number' ? finalPrice.toLocaleString() : String(finalPrice)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={occupancyKey} className="flex justify-between items-center text-sm font-semibold text-gray-700 bg-white p-2.5 rounded border border-gray-100 shadow-sm">
+                        <span className="uppercase text-[11px] text-gray-500">{occupancyKey}:</span>
+                        <span className="text-[#d97706] font-bold">
+                          ${typeof occupancyVal === 'number' ? occupancyVal.toLocaleString() : String(occupancyVal)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
           }
 
           return (
-            <div key={key} className="flex justify-between items-center text-lg font-bold text-gray-700">
-              <span className="capitalize">{key}:</span>
-              <span className="text-[#d97706]">${typeof val === 'number' ? val.toLocaleString() : String(val)} / night</span>
+            <div key={seasonKey} className="flex justify-between items-center text-lg font-bold text-gray-700">
+              <span className="capitalize">{seasonKey}:</span>
+              <span className="text-[#d97706]">${typeof seasonVal === 'number' ? seasonVal.toLocaleString() : String(seasonVal)} / night</span>
             </div>
           );
         })}
