@@ -1,17 +1,20 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { Database } from '@/lib/supabase/database.types';
 
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient<Database>(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          try {
+            return cookieStore.getAll();
+          } catch {
+            return [];
+          }
         },
         setAll(cookiesToSet) {
           try {
@@ -19,7 +22,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // Handled for Server Components
+            // Server Component context cannot always set cookies
           }
         },
       },
