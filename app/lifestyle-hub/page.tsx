@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Gift, ShoppingCart, Sparkles, Loader2, Search, Filter, ShieldCheck, Zap } from 'lucide-react';
+import { Gift, ShoppingCart, Sparkles, Loader2, Search, Filter, ShieldCheck, Zap, Trophy, Flame, Crown } from 'lucide-react';
 
 interface StoreItem {
   id: string;
@@ -33,7 +33,6 @@ export default function LifestyleHubPage() {
       if (error) {
         console.error('Error fetching store items:', error.message);
       } else {
-        // Map raw data safely to StoreItem structure to resolve TypeScript union/missing property errors
         const mappedItems: StoreItem[] = (data || []).map((item: any) => ({
           id: item.id,
           name: item.title || item.name || 'Digital Item',
@@ -45,7 +44,6 @@ export default function LifestyleHubPage() {
           voucher_codes: item.voucher_codes
         }));
 
-        // Filter items that belong to Digital Store or gift cards/vouchers
         const digitalItems = mappedItems.filter(
           item => item.category === 'Digital Store' || item.category === 'PSN Gift Cards' || item.category.toLowerCase().includes('gift')
         );
@@ -63,7 +61,6 @@ export default function LifestyleHubPage() {
   useEffect(() => {
     fetchStoreInventory(true);
 
-    // Subscribe to real-time changes on vendor_inventory
     const channel = supabase
       .channel('lifestyle-hub-inventory-sync')
       .on(
@@ -76,7 +73,6 @@ export default function LifestyleHubPage() {
       )
       .subscribe();
 
-    // Safety fallback poll every 4 seconds to guarantee sync with Vendor Hub deletions/additions
     const intervalId = setInterval(() => {
       fetchStoreInventory(false);
     }, 4000);
@@ -90,14 +86,12 @@ export default function LifestyleHubPage() {
   useEffect(() => {
     let result = storeItems;
 
-    // Filter by category
     if (selectedCategory !== 'All') {
       result = result.filter(item => 
         item.category?.toLowerCase() === selectedCategory.toLowerCase()
       );
     }
 
-    // Filter by search query
     if (searchQuery.trim() !== '') {
       result = result.filter(item => 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -143,50 +137,63 @@ export default function LifestyleHubPage() {
   const categories = ['All', 'Digital Store', 'PSN Gift Cards'];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pt-28 pb-20 px-4 sm:px-8 selection:bg-pink-500 selection:text-white">
-      <div className="max-w-7xl mx-auto space-y-10">
+    <div className="min-h-screen bg-black text-white pt-36 pb-28 px-4 sm:px-8 relative overflow-hidden">
+      
+      {/* Subtle ambient luxury gold background glows */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-amber-600/10 rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute top-1/3 right-10 w-[450px] h-[450px] bg-purple-900/15 rounded-full blur-[160px] pointer-events-none" />
+
+      <div className="max-w-7xl mx-auto space-y-16 relative z-10">
         
-        {/* Magnificent Hero Banner */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-pink-950/80 via-slate-900 to-purple-950/80 border border-pink-500/30 p-8 sm:p-12 shadow-[0_0_50px_rgba(236,72,153,0.15)]">
-          <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute right-20 top-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+        {/* Imperial Hero Banner */}
+        <div className="relative overflow-hidden rounded-[3rem] bg-zinc-950 border border-amber-500/30 p-8 sm:p-16 shadow-[0_0_80px_rgba(217,119,6,0.15)]">
+          <div className="absolute -right-20 -bottom-20 w-96 h-96 bg-gradient-to-br from-amber-500/15 to-transparent rounded-full blur-3xl pointer-events-none" />
           
-          <div className="relative z-10 space-y-4 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-pink-500/10 border border-pink-500/30 text-pink-400 text-xs font-black tracking-wider uppercase backdrop-blur-md">
-              <Gift size={14} className="animate-bounce" />
-              <span>Escape+ Digital Storefront & Rewards</span>
+          <div className="relative z-10 space-y-8 max-w-3xl">
+            <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-400 text-xs font-black tracking-[0.2em] uppercase">
+              <Crown size={16} className="animate-pulse text-amber-400" />
+              <span>Escape+ Imperial Concierge & Elite Rewards</span>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white leading-tight">
-              Lifestyle & <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">Rewards Hub</span>
+            
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-[1.08]">
+              Lifestyle & Rewards Vault
             </h1>
-            <p className="text-sm sm:text-base text-slate-300 font-medium leading-relaxed">
-              Browse and purchase exclusive digital vendor items, PlayStation gift cards, and gaming vouchers instantly with secure local & international payments.
+            
+            <p className="text-sm sm:text-base text-zinc-300 font-normal leading-relaxed max-w-2xl">
+              Immerse yourself in premier digital vendor assets, curated PlayStation gift cards, and high-tier gaming privileges secured instantly through elite banking channels.
             </p>
 
-            <div className="flex flex-wrap items-center gap-6 pt-2 text-xs font-bold text-slate-400">
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <ShieldCheck size={16} /> Instant Digital Delivery
+            {/* Impeccably Clear Luxury Trust Badges */}
+            <div className="flex flex-wrap items-center gap-4 pt-4 text-xs font-bold border-t border-zinc-800">
+              <span className="flex items-center gap-2.5 px-4.5 py-2.5 rounded-xl bg-zinc-900 border border-emerald-500/50 text-emerald-300 shadow-xl">
+                <ShieldCheck size={16} className="text-emerald-400 shrink-0" /> Instant Digital Delivery
               </span>
-              <span className="flex items-center gap-1.5 text-pink-400">
-                <Zap size={16} /> Secured by PesaPal & DPO
+              <span className="flex items-center gap-2.5 px-4.5 py-2.5 rounded-xl bg-zinc-900 border border-amber-500/50 text-amber-300 shadow-xl">
+                <Zap size={16} className="text-amber-400 shrink-0" /> Secured by PesaPal & DPO Direct
+              </span>
+              <span className="flex items-center gap-2.5 px-4.5 py-2.5 rounded-xl bg-zinc-900 border border-purple-500/50 text-purple-300 shadow-xl">
+                <Trophy size={16} className="text-purple-400 shrink-0" /> Verified Vendor Network
               </span>
             </div>
           </div>
         </div>
 
         {/* Filters & Search Toolbar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-slate-900/60 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-xl">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-5 bg-zinc-950 border border-amber-500/20 p-5 sm:p-6 rounded-[2.5rem] shadow-2xl">
           {/* Categories */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-            <Filter size={16} className="text-pink-400 ml-2 mr-1 shrink-0" />
+          <div className="flex items-center gap-3 overflow-x-auto pb-2 md:pb-0 scrollbar-none">
+            <div className="flex items-center gap-1.5 text-amber-400 px-2">
+              <Filter size={16} />
+              <span className="text-xs font-black uppercase tracking-wider hidden sm:inline">Filter:</span>
+            </div>
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shrink-0 cursor-pointer ${
+                className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 shrink-0 cursor-pointer ${
                   selectedCategory === cat
-                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)]'
-                    : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800 border border-white/5'
+                    ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black shadow-[0_0_30px_rgba(245,158,11,0.4)] scale-[1.02] font-black'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800'
                 }`}
               >
                 {cat}
@@ -195,108 +202,108 @@ export default function LifestyleHubPage() {
           </div>
 
           {/* Search Bar */}
-          <div className="relative min-w-[240px] sm:w-72">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="relative min-w-[280px] sm:w-88">
+            <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500/70" />
             <input
               type="text"
-              placeholder="Search store items..."
+              placeholder="Search elite rewards, assets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500 transition-all shadow-inner"
+              className="w-full bg-zinc-900 border border-amber-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all shadow-inner font-medium"
             />
           </div>
         </div>
 
         {/* Store Grid Section */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-              <Sparkles className="text-pink-400" size={20} />
-              Available Vendor Products
+        <div className="space-y-8">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
+              <Flame className="text-amber-500 fill-amber-500/20 animate-pulse" size={26} />
+              Exclusive Vendor Collection
             </h2>
-            <span className="text-xs font-bold text-slate-400">
-              Showing {filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'}
+            <span className="text-xs font-black uppercase tracking-widest text-amber-400 bg-amber-500/10 px-5 py-2.5 rounded-xl border border-amber-500/30 shadow-md">
+              {filteredItems.length} {filteredItems.length === 1 ? 'Privilege Available' : 'Privileges Available'}
             </span>
           </div>
 
           {loading ? (
-            <div className="text-center py-24 space-y-4">
-              <Loader2 className="text-pink-400 animate-spin mx-auto" size={40} />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Loading digital catalog...</p>
+            <div className="text-center py-36 space-y-4 bg-zinc-950 rounded-[2.5rem] border border-amber-500/20">
+              <Loader2 className="text-amber-400 animate-spin mx-auto" size={48} />
+              <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-500/80">Loading Imperial Vault...</p>
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="bg-slate-900/85 border border-white/10 rounded-3xl p-16 text-center space-y-4 shadow-2xl backdrop-blur-xl">
-              <div className="w-16 h-16 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mx-auto text-pink-400">
-                <Gift size={32} />
+            <div className="bg-zinc-950 border border-amber-500/35 rounded-[2.5rem] p-24 text-center space-y-6 shadow-2xl">
+              <div className="w-24 h-24 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.2)]">
+                <Gift size={44} />
               </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-white">No digital products found</h3>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              <div className="space-y-2 max-w-md mx-auto">
+                <h3 className="text-2xl font-black text-white">No privileges found</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
                   {searchQuery || selectedCategory !== 'All' 
-                    ? 'No products match your current filters or search query. Try broadening your search.'
-                    : 'Vendors can add gift cards and items via the Vendor Hub under the "Digital Store" or "PSN Gift Cards" category, and they will appear here instantly.'}
+                    ? 'No items match your active filters or query. Please adjust your criteria.'
+                    : 'Vendors can list items via the Vendor Hub under the "Digital Store" or "PSN Gift Cards" category to populate this concierge vault.'}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredItems.map((item) => (
                 <div 
                   key={item.id} 
-                  className="group bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl space-y-6 hover:border-pink-500/50 hover:shadow-[0_0_30px_rgba(236,72,153,0.15)] transition-all duration-300 flex flex-col justify-between"
+                  className="group relative bg-zinc-950 border border-amber-500/25 rounded-[2.5rem] p-8 shadow-2xl space-y-6 hover:border-amber-400 hover:shadow-[0_0_50px_rgba(245,158,11,0.25)] transition-all duration-500 flex flex-col justify-between overflow-hidden"
                 >
-                  <div className="space-y-4">
+                  <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/10 rounded-full blur-3xl group-hover:bg-amber-500/20 transition-all duration-500 pointer-events-none" />
+
+                  <div className="space-y-6 relative z-10">
                     <div className="flex items-start justify-between">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
-                        <Gift size={26} />
+                      <div className="w-18 h-18 rounded-2xl bg-gradient-to-tr from-amber-600 via-yellow-500 to-amber-400 flex items-center justify-center text-black shadow-[0_10px_25px_rgba(245,158,11,0.35)] group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                        <Gift size={30} className="stroke-[2.5]" />
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shadow-sm">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/30 shadow-md">
                         {item.stock_status || 'In Stock'}
                       </span>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-pink-400">
-                          {item.category || 'Digital Asset'}
-                        </span>
-                      </div>
-                      <h3 className="text-xl font-black text-white group-hover:text-pink-300 transition-colors">
+                    <div className="space-y-2.5">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-400 bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/30 inline-block">
+                        {item.category || 'Digital Asset'}
+                      </span>
+                      <h3 className="text-2xl font-black text-white group-hover:text-amber-300 transition-colors line-clamp-1">
                         {item.name}
                       </h3>
                       {item.description ? (
-                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                        <p className="text-xs text-zinc-300 line-clamp-2 leading-relaxed">
                           {item.description}
                         </p>
                       ) : (
-                        <p className="text-xs text-slate-500 italic">
-                          Instant digital delivery upon successful checkout.
+                        <p className="text-xs text-zinc-400 italic">
+                          Instant automated digital dispatch upon successful transaction clearance.
                         </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-white/10 flex items-center justify-between mt-auto">
+                  <div className="pt-6 border-t border-zinc-800 flex items-center justify-between mt-auto relative z-10">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Price</p>
-                      <p className="text-2xl font-black text-white">${item.price}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Valuation</p>
+                      <p className="text-3xl font-black text-amber-300 tracking-tight">${item.price}</p>
                     </div>
 
                     <button
                       type="button"
                       disabled={processingId === item.id}
                       onClick={() => handlePesaPalCheckout(item)}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(236,72,153,0.3)] hover:scale-105 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                      className="flex items-center gap-2 px-7 py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black text-xs font-black uppercase tracking-wider shadow-[0_0_30px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer disabled:opacity-50 font-black"
                     >
                       {processingId === item.id ? (
                         <>
-                          <Loader2 size={14} className="animate-spin" />
-                          <span>Connecting...</span>
+                          <Loader2 size={16} className="animate-spin text-black" />
+                          <span>Securing...</span>
                         </>
                       ) : (
                         <>
-                          <ShoppingCart size={14} />
-                          <span>Buy Now</span>
+                          <ShoppingCart size={16} className="text-black" />
+                          <span>Acquire</span>
                         </>
                       )}
                     </button>

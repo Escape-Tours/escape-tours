@@ -59,6 +59,19 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
   const [loadingStore, setLoadingStore] = useState(true);
   const [cartNotification, setCartNotification] = useState<string | null>(null);
 
+  // Uber-like Feature State (Locations, Vehicles, Flow)
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [destinationLocation, setDestinationLocation] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+  const [rideStep, setRideStep] = useState<'select' | 'confirm' | 'payment'>('select');
+  const [dispatchLoading, setDispatchLoading] = useState(false);
+
+  const availableVehicles = [
+    { id: 'v1', name: 'Safari Land Cruiser V8', desc: 'Pop-up roof wildlife viewing, 4x4 reinforced', price: 45, eta: '4 mins away' },
+    { id: 'v2', name: 'VIP Executive Transfer', desc: 'Climate controlled luxury SUV for city &...', price: 30, eta: '2 mins away' },
+    { id: 'v3', name: 'Group Safari Sprinter', desc: 'Spacious seating for up to 10 explorers', price: 75, eta: '7 mins away' },
+  ];
+
   const activeDisplayTier = userTier.toUpperCase();
 
   useEffect(() => {
@@ -174,6 +187,39 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
     } catch (err) {
       console.error('Error logging out:', err);
       setLoggingOut(false);
+    }
+  };
+
+  const handleProceedToConfirm = () => {
+    if (!pickupLocation || !destinationLocation || !selectedVehicle) {
+      alert('Please fill in pickup, destination, and select a vehicle tier.');
+      return;
+    }
+    setRideStep('confirm');
+  };
+
+  const handleFinalPesapalPayment = async () => {
+    setDispatchLoading(true);
+    try {
+      const response = await fetch('/api/pesapal/submit-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pickup: pickupLocation,
+          destination: destinationLocation,
+          vehicle: selectedVehicle
+        })
+      });
+      const data = await response.json();
+      if (data?.redirect_url) {
+        window.location.href = data.redirect_url;
+      } else {
+        alert('Failed to initialize PesaPal checkout.');
+        setDispatchLoading(false);
+      }
+    } catch (err) {
+      console.error('PesaPal error:', err);
+      setDispatchLoading(false);
     }
   };
 
@@ -304,6 +350,152 @@ export default function UserDashboard({ tier = 'CITIZEN', userName }: UserDashbo
           </div>
         </div>
       </header>
+
+      {/* Uber-like Feature Section (Integrated into User Hub) */}
+      <section className="bg-gradient-to-br from-neutral-900/95 via-neutral-950 to-neutral-950 border border-neutral-800/80 rounded-[2.5rem] p-6 sm:p-8 shadow-2xl relative overflow-hidden space-y-6">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-neutral-800/80 pb-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-amber-400 text-[10px] font-mono uppercase tracking-widest font-bold mb-1">
+              <Compass size={12} /> Instant Dispatch Circuit
+            </div>
+            <h2 className="text-xl font-black text-white">Where to, Explorer?</h2>
+          </div>
+          <div className="text-xs font-mono text-neutral-400 bg-neutral-900 border border-neutral-800 px-3.5 py-1.5 rounded-xl">
+            Step: <span className="text-amber-400 font-bold uppercase">{rideStep}</span>
+          </div>
+        </div>
+
+        {rideStep === 'select' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold">Pickup Location</label>
+                <div className="relative">
+                  <MapPin size={16} className="absolute left-4 top-3.5 text-amber-400" />
+                  <input 
+                    type="text"
+                    value={pickupLocation}
+                    onChange={(e) => setPickupLocation(e.target.value)}
+                    placeholder="Enter pickup location (e.g., Julius Nyerere Airport)" 
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold">Destination / Dropoff Location</label>
+                <div className="relative">
+                  <Compass size={16} className="absolute left-4 top-3.5 text-amber-400" />
+                  <input 
+                    type="text"
+                    value={destinationLocation}
+                    onChange={(e) => setDestinationLocation(e.target.value)}
+                    placeholder="Enter destination (e.g., Serengeti Serena Lodge)" 
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white focus:border-amber-500 outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold">Select Fleet Vehicle Tier</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {availableVehicles.map((veh) => {
+                    const isSelected = selectedVehicle?.id === veh.id;
+                    return (
+                      <div 
+                        key={veh.id}
+                        onClick={() => setSelectedVehicle(veh)}
+                        className={`cursor-pointer bg-neutral-900/90 border rounded-2xl p-4 space-y-3 transition-all ${
+                          isSelected ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10' : 'border-neutral-800 hover:border-neutral-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-mono font-bold text-amber-400">${veh.price}</span>
+                          <span className="text-[10px] font-mono text-neutral-400">{veh.eta}</span>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-white">{veh.name}</h4>
+                          <p className="text-[11px] text-neutral-400 line-clamp-1 mt-0.5">{veh.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button 
+                onClick={handleProceedToConfirm}
+                className="w-full mt-4 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-neutral-950 font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-wider shadow-[0_10px_25px_rgba(245,158,11,0.25)] flex items-center justify-center gap-2"
+              >
+                Review Ride Dispatch <ArrowRight size={16} />
+              </button>
+            </div>
+
+            {/* Storefront Mini Preview */}
+            <div className="bg-neutral-900/70 border border-neutral-800/80 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-bold block mb-1">Lifestyle Hub & Vendor Goods</span>
+                <h3 className="text-base font-black text-white">Digital Storefront</h3>
+                <p className="text-xs text-neutral-400 mt-1">Instant digital fulfillment available through your client account.</p>
+              </div>
+              <div className="bg-neutral-950 border border-neutral-800 p-4 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono text-neutral-400 block">Active Cart</span>
+                  <span className="text-sm font-bold text-white">{cart.length} item(s)</span>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400">${cart.reduce((acc, item) => acc + (Number(item.price) || 0), 0)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {rideStep === 'confirm' && (
+          <div className="max-w-xl mx-auto bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-6">
+            <div className="space-y-1 text-center">
+              <h3 className="text-lg font-black text-white">Confirm Your Ride Dispatch</h3>
+              <p className="text-xs text-neutral-400">Review your trip details before finalizing payment.</p>
+            </div>
+
+            <div className="space-y-3 font-mono text-xs bg-neutral-950 p-4 rounded-xl border border-neutral-800">
+              <div className="flex justify-between py-1 border-b border-neutral-900">
+                <span className="text-neutral-400">Pickup:</span>
+                <span className="text-white font-bold">{pickupLocation}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-neutral-900">
+                <span className="text-neutral-400">Destination:</span>
+                <span className="text-white font-bold">{destinationLocation}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-neutral-900">
+                <span className="text-neutral-400">Vehicle:</span>
+                <span className="text-amber-400 font-bold">{selectedVehicle?.name}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-neutral-400">Total Price:</span>
+                <span className="text-emerald-400 font-bold">${selectedVehicle?.price}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setRideStep('select')}
+                className="w-1/2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold py-3 rounded-xl transition text-xs uppercase tracking-wider"
+              >
+                Back
+              </button>
+              <button 
+                onClick={handleFinalPesapalPayment}
+                disabled={dispatchLoading}
+                className="w-1/2 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black py-3 rounded-xl transition text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg"
+              >
+                {dispatchLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} 
+                Proceed to PesaPal
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Main Dashboard Body */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

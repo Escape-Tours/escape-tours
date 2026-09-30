@@ -1,63 +1,59 @@
+// app/api/pesapal/submit-order/route.ts
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { itemId, itemName, amount, vendorId, currency } = body;
+    const { amount, currency, description, email, first_name, last_name, phone_number, items } = body;
 
-    if (!amount || !itemName) {
-      return NextResponse.json({ error: 'Missing required item details' }, { status: 400 });
-    }
-
-    // PesaPal API credentials from your environment variables
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
     const isLive = process.env.PESAPAL_ENV === 'live';
-    const baseUrl = isLive 
-      ? 'https://pay.pesapal.com/v3' 
-      : 'https://cybqa.pesapal.com/v3';
+    const baseUrl = isLive ? 'https://pay.pesapal.com/v3' : 'https://cybqa.pesapal.com/pesapalv3';
 
     // 1. Authenticate with PesaPal to get token
     const authResponse = await fetch(`${baseUrl}/api/Auth/RequestToken`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         consumer_key: consumerKey,
-        consumer_secret: consumerSecret,
-      }),
+        consumer_secret: consumerSecret
+      })
     });
 
     const authData = await authResponse.json();
-
     if (!authData.token) {
-      // Fallback for development/testing if PesaPal keys are not yet configured in .env.local
-      console.warn('PesaPal authentication failed or keys missing. Using mock checkout redirect for testing.');
-      return NextResponse.json({
-        redirect_url: `https://cybqa.pesapal.com/v3/mock-checkout?item=${encodeURIComponent(itemName)}&amount=${amount}`
-      });
+      throw new Error('Failed to authenticate with PesaPal API');
     }
 
     const token = authData.token;
+    const trackingId = `ESC-${Date.now()}`;
 
     // 2. Submit Order Request to PesaPal
-    const orderTrackingId = `ESCAPE_${Date.now()}`;
     const orderPayload = {
-      id: orderTrackingId,
+      id: trackingId,
       currency: currency || 'USD',
-      amount: Number(amount),
-      description: `Purchase of ${itemName} via Escape+ Store`,
-      callback_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/lifestyle-hub?order_id=${orderTrackingId}`,
-      notification_id: process.env.PESAPAL_IPN_ID || '',
+      amount: amount,
+      description: description || 'Escape+ Storefront / Fleet Order',
+      callback_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/user-hub?pesapal_order_tracking_id=${trackingId}`,
+      notification_id: process.env.PESAPAL_IPN_ID || '', // Optional if pre-registered
       billing_address: {
-        email_address: 'customer@escapetourstz.com',
-        phone_number: '',
+        email_address: email || 'explorer@escapetourstz.com',
+        phone_number: phone_number || '+255666281717',
         country_code: 'TZ',
-        first_name: 'Escape',
-        last_name: 'Customer',
-      },
+        first_name: first_name || 'Valued',
+        middle_name: '',
+        last_name: last_name || 'Explorer',
+        line_1: 'Escape Tours Headquarters',
+        line_2: '',
+        city: 'Arusha',
+        state: 'Arusha',
+        postal_code: '00000',
+        zip_code: ''
+      }
     };
 
     const orderResponse = await fetch(`${baseUrl}/api/Transactions/SubmitOrderRequest`, {
@@ -65,9 +61,9 @@ export async function POST(request: Request) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify(orderPayload),
+      body: JSON.stringify(orderPayload)
     });
 
     const orderData = await orderResponse.json();
@@ -75,11 +71,14 @@ export async function POST(request: Request) {
     if (orderData.redirect_url) {
       return NextResponse.json({ redirect_url: orderData.redirect_url });
     } else {
-      return NextResponse.json({ error: orderData.message || 'Failed to generate PesaPal redirect URL' }, { status: 400 });
+      throw new Error(orderData.error?.message || 'Failed to generate PesaPal redirect URL');
     }
 
-  } catch (err: any) {
-    console.error('PesaPal API Error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  } catch (error: any) {
+    console.error('PesaPal API error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }

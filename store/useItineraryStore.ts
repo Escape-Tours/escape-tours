@@ -25,6 +25,7 @@ export interface ItineraryItem {
   readonly timeSlot?: SlotType;
   readonly quantity?: number;
   readonly slots?: number;
+  readonly isDeduplicated?: boolean;
 }
 
 export interface ItineraryState {
@@ -35,6 +36,8 @@ export interface ItineraryState {
   readonly totalDays: number;
   readonly adults: number;
   readonly children: number;
+  readonly notifications: readonly string[];
+  readonly rejectedCarDays: readonly number[];
   
   setTier: (tier: ResidencyTier) => void;
   setGuests: (adults: number, children: number) => void;
@@ -46,6 +49,7 @@ export interface ItineraryState {
   addDay: () => void;
   removeDay: () => void;
   clearItinerary: () => void;
+  rejectCarForDay: (dayId: number) => void;
 
   addCartItem: (item: Omit<ItineraryItem, 'id' | 'price'> & { id?: string; price?: number }) => void;
   removeCartItem: (id: string) => void;
@@ -53,11 +57,12 @@ export interface ItineraryState {
   buildFromCart: (targetDayId?: number, targetSlot?: SlotType) => void;
   
   getSlotItems: (dayId: number, timeSlot: SlotType) => ItineraryItem[];
-  getCostBreakdown: () => { parkFees: number; accommodation: number; vat: number; grandTotal: number };
+  getCostBreakdown: () => { parkFees: number; accommodation: number; transport: number; vat: number; agencyFee: number; grandTotal: number; subtotal: number; notifications: string[] };
   reset: () => void;
 }
 
-const CURRENT_STORE_VERSION = 30;
+const CURRENT_STORE_VERSION = 33;
+const DEFAULT_SAFARI_CAR_PRICE = 200; // Standard daily safari vehicle cost
 
 const resolvePrice = (item: any, tier: ResidencyTier, adults: number = 1, children: number = 0): number => {
   let unitPrice = 0;
@@ -117,6 +122,8 @@ export const useItineraryStore = create<ItineraryState>()(
       totalDays: 5,
       adults: 1, 
       children: 0,
+      notifications: [],
+      rejectedCarDays: [],
 
       setTier: (tier) => {
         set({ tier });
@@ -132,10 +139,6 @@ export const useItineraryStore = create<ItineraryState>()(
 
       recalculatePrices: () => set((state) => ({
         items: (state.items || []).map(i => ({
-          ...i,
-          price: resolvePrice(i, state.tier, state.adults, state.children)
-        })),
-        cartItems: (state.cartItems || []).map(i => ({
           ...i,
           price: resolvePrice(i, state.tier, state.adults, state.children)
         }))
@@ -159,15 +162,12 @@ export const useItineraryStore = create<ItineraryState>()(
           (i) => !(i.dayId === dayId && i.timeSlot === timeSlot)
         );
 
-        return {
-          items: [...filteredItems, newItem]
-        };
+        return { items: [...filteredItems, newItem] };
       }),
 
-      removeItem: (id) => set((state) => {
-        const updatedItems = (state.items || []).filter((i) => i.id !== id && i.originalId !== id);
-        return { items: updatedItems };
-      }),
+      removeItem: (id) => set((state) => ({
+        items: (state.items || []).filter((i) => i.id !== id && i.originalId !== id)
+      })),
 
       updateItemSlot: (itemId, dayId, timeSlot) => set((state) => ({
         items: (state.items || []).map((i) => (i.id === itemId || i.originalId === itemId) ? { ...i, dayId, timeSlot } : i)
@@ -191,7 +191,11 @@ export const useItineraryStore = create<ItineraryState>()(
         return { totalDays: newTotalDays, items: cleanedItems };
       }),
 
-      clearItinerary: () => set({ items: [] }),
+      rejectCarForDay: (dayId) => set((state) => ({
+        rejectedCarDays: state.rejectedCarDays.includes(dayId) ? state.rejectedCarDays : [...state.rejectedCarDays, dayId]
+      })),
+
+      clearItinerary: () => set({ items: [], notifications: [], rejectedCarDays: [] }),
 
       addCartItem: (item) => set((state) => {
         const resolvedPrice = resolvePrice(item, state.tier, state.adults, state.children);
@@ -266,39 +270,76 @@ export const useItineraryStore = create<ItineraryState>()(
       getCostBreakdown: () => {
         const state = get();
         const items = state.items || [];
-        
-        const processedLodgeNights = new Set<string>();
-        let accommodation = 0;
+        const notifications: string[] = [];
 
+        // Group items by day
+        const daysMap = new Map<number, ItineraryItem[]>();
         items.forEach(i => {
-          const itemPrice = Number(i?.price) || 0;
-          if (i?.type === 'lodges' && itemPrice > 0) {
-            const lodgeIdentifier = i.originalId || i.id;
-            const nightKey = `${i.dayId}-${lodgeIdentifier}`;
-            
-            if (!processedLodgeNights.has(nightKey)) {
-              processedLodgeNights.add(nightKey);
-              accommodation += itemPrice;
-            }
-          }
+          const dId = i.dayId ?? 1;
+          if (!daysMap.has(dId)) daysMap.set(dId, []);
+          daysMap.get(dId)!.push(i);
         });
 
-        const defaultParkFee = state.tier === 'CITIZEN' ? 5 : state.tier === 'RESIDENT' ? 15 : 30;
-        const parkFees = items
-          .filter(i => i?.type === 'parks')
-          .reduce((a, b) => a + (Number(b?.price) > 0 ? Number(b.price) : defaultParkFee), 0);
-        
-        const nonLodgeItemsTotal = items
-          .filter(i => i?.type !== 'lodges')
-          .reduce((acc, i) => acc + (Number(i?.price) > 0 ? Number(i.price) : (i?.type === 'parks' ? defaultParkFee : 0)), 0);
+        let accommodation = 0;
+        let parkFees = 0;
+        let transport = 0;
+        let otherItemsTotal = 0;
 
-        const baseTotal = Math.max(accommodation + nonLodgeItemsTotal, parkFees);
-        const vat = Math.round(baseTotal * 0.18);
-        
-        return { parkFees, accommodation, vat, grandTotal: baseTotal + vat };
+        const defaultParkFee = state.tier === 'CITIZEN' ? 5 : state.tier === 'RESIDENT' ? 15 : 30;
+
+        daysMap.forEach((dayItems, dayId) => {
+          // 1. Same-day lodge deduplication per day
+          const lodgeItems = dayItems.filter(i => i?.type === 'lodges');
+          if (lodgeItems.length > 0) {
+            const uniqueLodgeIds = new Set(lodgeItems.map(l => l.originalId || l.id || l.name));
+            if (uniqueLodgeIds.size === 1) {
+              // Deduplicate: charge full price for only the first occurrence of the lodge on this day
+              accommodation += Number(lodgeItems[0]?.price) || 0;
+              notifications.push(`Day ${dayId}: Same-day lodging coverage detected (${lodgeItems[0].name}). Duplicate slot zeroed out.`);
+            } else {
+              // Different hotels/transition on same day
+              lodgeItems.forEach(l => {
+                accommodation += Number(l?.price) || 0;
+              });
+            }
+          }
+
+          // 2. Parks calculation
+          const dayParks = dayItems.filter(i => i?.type === 'parks');
+          const hasPark = dayParks.length > 0;
+          const hasLodge = lodgeItems.length > 0;
+
+          dayParks.forEach(p => {
+            parkFees += Number(p?.price) > 0 ? Number(p.price) : defaultParkFee;
+          });
+
+          // 3. Explicit transport / car check
+          const hasCar = dayItems.some(i => i?.type === 'transfers' || i?.type === 'car');
+          if (hasCar) {
+            dayItems.filter(i => i?.type === 'transfers' || i?.type === 'car').forEach(c => {
+              transport += Number(c?.price) || 0;
+            });
+          } else if (hasLodge && hasPark && !state.rejectedCarDays.includes(dayId)) {
+            // Chrono-flow rule: Hotel + Park selected without car -> Auto-add safari car & notify
+            transport += DEFAULT_SAFARI_CAR_PRICE;
+            notifications.push(`Chrono-Flow Notice: Day ${dayId} contains a hotel and a park. A safari vehicle ($${DEFAULT_SAFARI_CAR_PRICE}) has been included for logistics.`);
+          }
+
+          // 4. Other item types (activities, treks)
+          dayItems.filter(i => !['lodges', 'parks', 'transfers', 'car'].includes(i?.type)).forEach(o => {
+            otherItemsTotal += Number(o?.price) || 0;
+          });
+        });
+
+        const subtotal = accommodation + parkFees + transport + otherItemsTotal;
+        const vat = Math.round(subtotal * 0.18);
+        const agencyFee = Math.round(subtotal * 0.20);
+        const grandTotal = subtotal + vat + agencyFee;
+
+        return { parkFees, accommodation, transport, vat, agencyFee, subtotal, grandTotal, notifications };
       },
 
-      reset: () => set({ items: [], cartItems: [], tier: RESIDENCY_TIER.INTERNATIONAL, totalDays: 5, adults: 1, children: 0 })
+      reset: () => set({ items: [], cartItems: [], tier: RESIDENCY_TIER.INTERNATIONAL, totalDays: 5, adults: 1, children: 0, notifications: [], rejectedCarDays: [] })
     }),
     { 
       name: 'itinerary-storage',
@@ -326,23 +367,11 @@ export const useItineraryStore = create<ItineraryState>()(
             }).filter(Boolean)
           : [];
 
-        const validCartItems = Array.isArray(persistedState.cartItems)
-          ? persistedState.cartItems.map((i: any) => {
-              if (!i) return null;
-              const recalculatedPrice = resolvePrice(i, currentTier, currentAdults, currentChildren);
-              return {
-                ...i,
-                price: recalculatedPrice >= 0 ? recalculatedPrice : i.price
-              };
-            }).filter(Boolean)
-          : [];
-
         return {
           ...currentState,
           ...persistedState,
           adults: Math.max(1, currentAdults),
           items: validItems,
-          cartItems: validCartItems,
         };
       },
       partialize: (state) => ({ 
@@ -352,7 +381,8 @@ export const useItineraryStore = create<ItineraryState>()(
         tier: state.tier, 
         totalDays: state.totalDays, 
         adults: state.adults, 
-        children: state.children 
+        children: state.children,
+        rejectedCarDays: state.rejectedCarDays
       })
     }
   )

@@ -1,17 +1,17 @@
+// components/BookingModal.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, X, Users, Baby, Hotel, Globe, Sparkles, MessageSquare, AlertCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Loader2, X, Users, Baby, Hotel, Globe, Sparkles, MessageSquare, AlertCircle, ShieldCheck } from "lucide-react";
 import { createBooking } from "@/actions/itineraryActions";
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 
 const Input = ({ icon, ...props }: any) => (
-  <div className="flex items-center gap-3 bg-slate-50 px-4 rounded-xl border border-slate-200 focus-within:ring-2 focus-within:ring-amber-500 transition-all">
-    {icon && <div className="text-slate-400">{icon}</div>}
-    <input {...props} className="bg-transparent py-3 w-full outline-none text-sm font-medium text-slate-900 placeholder:text-slate-400" />
+  <div className="flex items-center gap-3 bg-stone-50/80 px-4 rounded-2xl border border-stone-200/80 focus-within:ring-2 focus-within:ring-amber-500/50 focus-within:bg-white transition-all duration-300 shadow-sm">
+    {icon && <div className="text-amber-700/60">{icon}</div>}
+    <input {...props} className="bg-transparent py-3.5 w-full outline-none text-sm font-medium text-stone-900 placeholder:text-stone-400" />
   </div>
 );
 
@@ -19,6 +19,27 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
   
+  // Local state to ensure dropdown changes immediately update the tier even if props lag
+  const [selectedTier, setSelectedTier] = useState<string>(activeTier || "CITIZEN");
+
+  // Keep local state in sync if prop changes
+  useEffect(() => {
+    if (activeTier) {
+      setSelectedTier(activeTier);
+    }
+  }, [activeTier]);
+
+  const handleTierChange = (newTier: string) => {
+    setSelectedTier(newTier);
+    if (setTier) {
+      setTier(newTier);
+    }
+  };
+
+  const resolvedTier = useMemo(() => {
+    return selectedTier || 'INTERNATIONAL';
+  }, [selectedTier]);
+
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   
@@ -50,16 +71,18 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
     const rawPriceData = hotel.room_prices?.[bookingData.category];
     let nightRate = 100;
 
+    const currentTierEval = resolvedTier;
+
     if (typeof rawPriceData === 'number') {
       nightRate = rawPriceData;
     } else if (typeof rawPriceData === 'object' && rawPriceData !== null) {
-      const tierKey = activeTier?.toLowerCase() || "";
-      const target = rawPriceData[activeTier] || rawPriceData[tierKey] || rawPriceData.high || rawPriceData.low || Object.values(rawPriceData)[0];
+      const tierKey = currentTierEval.toLowerCase();
+      const target = rawPriceData[currentTierEval] || rawPriceData[tierKey] || rawPriceData.high || rawPriceData.low || Object.values(rawPriceData)[0];
       
       if (typeof target === 'number') {
         nightRate = target;
       } else if (typeof target === 'object' && target !== null) {
-        nightRate = Number(target[activeTier] || target[tierKey] || Object.values(target)[0]) || 100;
+        nightRate = Number(target[currentTierEval] || target[tierKey] || Object.values(target)[0]) || 100;
       }
     }
 
@@ -75,7 +98,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
     const totalAmount = subtotalBase + vat + agencyFee;
 
     return { nights, subtotalBase, vat, agencyFee, totalAmount };
-  }, [bookingData, hotel, activeTier]);
+  }, [bookingData, hotel, resolvedTier]);
 
   const handleConfirm = async () => {
     if (!details) return;
@@ -99,7 +122,7 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
       check_in: bookingData.checkIn,
       check_out: bookingData.checkOut,
       room_category: bookingData.category,
-      residency_type: activeTier,
+      residency_type: resolvedTier,
       special_requests: bookingData.specialRequests.trim(),
       nights: details.nights,
       subtotal: details.subtotalBase,
@@ -134,46 +157,58 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
 
   return (
     <Dialog open={isOpen} onOpenChange={onCloseAction}>
-      <DialogContent className="max-w-[500px] p-0 overflow-hidden bg-white rounded-3xl border-0 shadow-2xl">
-        <button onClick={onCloseAction} className="absolute right-4 top-4 z-50 p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
+      <DialogContent className="max-w-[520px] p-0 overflow-hidden bg-gradient-to-b from-stone-50 via-white to-stone-50/90 rounded-[2.5rem] border border-stone-200/60 shadow-2xl backdrop-blur-xl">
+        <button 
+          onClick={onCloseAction} 
+          className="absolute right-5 top-5 z-50 p-2.5 bg-stone-100/80 hover:bg-stone-200/80 rounded-full text-stone-600 transition-colors duration-200 shadow-sm"
+        >
+          <X size={18}/>
+        </button>
         
-        <div className="p-8 space-y-5 max-h-[85vh] overflow-y-auto">
-          <div className="flex items-center gap-2 text-amber-600 font-bold tracking-[0.2em] uppercase text-xs">
-            <Sparkles size={14} /> Escape + Vision Booking
+        <div className="p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+          {/* Header Branding */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center gap-2 text-amber-700 font-semibold tracking-[0.25em] uppercase text-[10px]">
+              <Sparkles size={13} className="text-amber-600" /> Escape Safari Collection
+            </div>
+            <DialogTitle className="text-3xl font-serif tracking-tight text-stone-900">
+              {hotel?.name}
+            </DialogTitle>
           </div>
           
-          <DialogTitle className="text-2xl font-serif text-slate-900">Finalizing {hotel?.name}</DialogTitle>
-          
-          {/* PERSONAL DETAILS LOCKED AT THE TOP */}
-          <div className="space-y-3 bg-amber-50/40 p-4 rounded-2xl border border-amber-100">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-800">1. Guest Information</p>
-            <div className="grid grid-cols-2 gap-3">
+          {/* PERSONAL DETAILS SECTION */}
+          <div className="space-y-3.5 bg-amber-50/30 p-5 rounded-3xl border border-amber-200/40 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-amber-900/80">1. Guest Information</span>
+              <ShieldCheck size={16} className="text-amber-700/60" />
+            </div>
+            <div className="grid grid-cols-2 gap-3.5">
               <Input placeholder="First Name *" value={bookingData.firstName} onChange={(e: any) => setBookingData({...bookingData, firstName: e.target.value})} />
               <Input placeholder="Last Name *" value={bookingData.lastName} onChange={(e: any) => setBookingData({...bookingData, lastName: e.target.value})} />
             </div>
             <Input type="email" placeholder="Email Address *" value={bookingData.email} onChange={(e: any) => setBookingData({...bookingData, email: e.target.value})} />
-            <div className="bg-white px-4 rounded-xl border border-slate-200 focus-within:ring-2 focus-within:ring-amber-500">
-              <PhoneInput defaultCountry="TZ" value={bookingData.phone} onChange={(val: any) => setBookingData(prev => ({ ...prev, phone: val || "" }))} className="py-2" />
+            <div className="bg-stone-50/80 px-4 rounded-2xl border border-stone-200/80 focus-within:ring-2 focus-within:ring-amber-500/50 focus-within:bg-white transition-all shadow-sm">
+              <PhoneInput defaultCountry="TZ" value={bookingData.phone} onChange={(val: any) => setBookingData(prev => ({ ...prev, phone: val || "" }))} className="py-2.5 text-stone-900" />
             </div>
           </div>
 
           {/* STAY DETAILS SECTION */}
-          <div className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-600">2. Stay Details</p>
+          <div className="space-y-3.5 bg-stone-100/50 p-5 rounded-3xl border border-stone-200/60 shadow-sm">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-stone-600">2. Stay Details & Residency</span>
             
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2 flex items-center gap-3 bg-white px-4 rounded-xl border border-slate-200">
-                <Globe size={16} className="text-slate-400"/>
-                <select value={activeTier} onChange={(e) => setTier?.(e.target.value as any)} className="w-full bg-transparent py-3 outline-none text-sm font-medium">
-                  <option value="INTERNATIONAL">International</option>
-                  <option value="RESIDENT">Resident</option>
-                  <option value="CITIZEN">Citizen</option>
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="col-span-2 flex items-center gap-3 bg-stone-50/80 px-4 rounded-2xl border border-stone-200/80 focus-within:ring-2 focus-within:ring-amber-500/50 focus-within:bg-white transition-all shadow-sm">
+                <Globe size={16} className="text-amber-700/60"/>
+                <select value={resolvedTier} onChange={(e) => handleTierChange(e.target.value)} className="w-full bg-transparent py-3.5 outline-none text-sm font-medium text-stone-900 cursor-pointer">
+                  <option value="CITIZEN">East African Citizen</option>
+                  <option value="RESIDENT">Tanzania Resident</option>
+                  <option value="INTERNATIONAL">International Guest</option>
                 </select>
               </div>
 
-              <div className="col-span-2 flex items-center gap-3 bg-white px-4 rounded-xl border border-slate-200">
-                <Hotel size={16} className="text-slate-400"/>
-                <select name="category" value={bookingData.category} onChange={(e) => setBookingData({...bookingData, category: e.target.value})} className="w-full bg-transparent py-3 outline-none text-sm font-medium">
+              <div className="col-span-2 flex items-center gap-3 bg-stone-50/80 px-4 rounded-2xl border border-stone-200/80 focus-within:ring-2 focus-within:ring-amber-500/50 focus-within:bg-white transition-all shadow-sm">
+                <Hotel size={16} className="text-amber-700/60"/>
+                <select name="category" value={bookingData.category} onChange={(e) => setBookingData({...bookingData, category: e.target.value})} className="w-full bg-transparent py-3.5 outline-none text-sm font-medium text-stone-900 cursor-pointer">
                   {roomCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
@@ -181,14 +216,20 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
               <Input icon={<Users size={16}/>} type="number" placeholder="Adults" value={bookingData.adults} onChange={(e: any) => setBookingData({...bookingData, adults: e.target.value})} />
               <Input icon={<Baby size={16}/>} type="number" placeholder="Children (50%)" value={bookingData.children} onChange={(e: any) => setBookingData({...bookingData, children: e.target.value})} />
               
-              <Input type="date" min={today} value={bookingData.checkIn} onChange={(e: any) => setBookingData({...bookingData, checkIn: e.target.value})} />
-              <Input type="date" min={bookingData.checkIn || today} value={bookingData.checkOut} onChange={(e: any) => setBookingData({...bookingData, checkOut: e.target.value})} />
+              <div className="space-y-1 col-span-1">
+                <label className="text-[10px] uppercase font-bold text-stone-400 pl-1">Check-In</label>
+                <Input type="date" min={today} value={bookingData.checkIn} onChange={(e: any) => setBookingData({...bookingData, checkIn: e.target.value})} />
+              </div>
+              <div className="space-y-1 col-span-1">
+                <label className="text-[10px] uppercase font-bold text-stone-400 pl-1">Check-Out</label>
+                <Input type="date" min={bookingData.checkIn || today} value={bookingData.checkOut} onChange={(e: any) => setBookingData({...bookingData, checkOut: e.target.value})} />
+              </div>
               
-              <div className="col-span-2 flex items-start gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200">
-                 <MessageSquare size={16} className="text-slate-400 mt-1"/>
+              <div className="col-span-2 flex items-start gap-3 bg-stone-50/80 px-4 py-3 rounded-2xl border border-stone-200/80 focus-within:ring-2 focus-within:ring-amber-500/50 focus-within:bg-white transition-all shadow-sm">
+                 <MessageSquare size={16} className="text-amber-700/60 mt-2"/>
                  <textarea 
-                    placeholder="Special requests or dietary requirements..." 
-                    className="bg-transparent w-full outline-none text-sm font-medium text-slate-900 placeholder:text-slate-400 resize-none h-16"
+                    placeholder="Special requests, dietary needs, or milestone celebrations..." 
+                    className="bg-transparent w-full outline-none text-sm font-medium text-stone-900 placeholder:text-stone-400 resize-none h-20 pt-1"
                     value={bookingData.specialRequests}
                     onChange={(e) => setBookingData({...bookingData, specialRequests: e.target.value})}
                  />
@@ -197,25 +238,30 @@ export function BookingModal({ hotel, isOpen, onCloseAction, activeTier, setTier
           </div>
 
           {details && (
-            <div className="p-5 bg-slate-900 text-slate-300 rounded-2xl space-y-2 text-sm font-medium shadow-inner">
-              <div className="flex justify-between"><span>Base ({details.nights} nights + children)</span><span>${details.subtotalBase.toFixed(2)}</span></div>
-              <div className="flex justify-between"><span>VAT (18%)</span><span>${details.vat.toFixed(2)}</span></div>
-              <div className="flex justify-between text-amber-500"><span>Agency Fee (20%)</span><span>${details.agencyFee.toFixed(2)}</span></div>
-              <div className="border-t border-slate-700 pt-3 flex justify-between font-black text-lg text-white">
-                <span>Total Vision Investment</span><span>${details.totalAmount.toFixed(2)}</span>
+            <div className="p-6 bg-stone-900 text-stone-300 rounded-3xl space-y-2.5 text-sm font-medium shadow-xl border border-stone-800">
+              <div className="flex justify-between text-xs text-stone-400"><span>Base Accommodation ({details.nights} nights)</span><span>${details.subtotalBase.toFixed(2)}</span></div>
+              <div className="flex justify-between text-xs text-stone-400"><span>Government Tax (VAT 18%)</span><span>${details.vat.toFixed(2)}</span></div>
+              <div className="flex justify-between text-xs text-amber-400 font-semibold"><span>Concierge & Agency Fee (20%)</span><span>${details.agencyFee.toFixed(2)}</span></div>
+              <div className="border-t border-stone-800 pt-3.5 flex justify-between font-serif text-xl font-bold text-white tracking-wide">
+                <span>Total Investment</span>
+                <span className="text-amber-400">${details.totalAmount.toFixed(2)}</span>
               </div>
             </div>
           )}
 
           {formError && (
-            <div className="flex items-center gap-2 text-red-500 text-sm font-medium bg-red-50 p-3 rounded-lg border border-red-100">
-              <AlertCircle size={16} />
+            <div className="flex items-center gap-2 text-rose-600 text-xs font-semibold bg-rose-50 p-4 rounded-2xl border border-rose-100 shadow-sm">
+              <AlertCircle size={16} className="shrink-0" />
               {formError}
             </div>
           )}
 
-          <button onClick={handleConfirm} disabled={loading || !details} className="w-full py-4 bg-amber-500 text-slate-900 font-black rounded-xl hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98]">
-            {loading ? <Loader2 className="animate-spin mx-auto" /> : "Confirm Reservation"}
+          <button 
+            onClick={handleConfirm} 
+            disabled={loading || !details} 
+            className="w-full py-4.5 bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 font-bold uppercase tracking-wider text-xs rounded-2xl hover:from-amber-400 hover:to-amber-500 transition-all duration-300 shadow-xl shadow-amber-500/20 active:scale-[0.98] disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="animate-spin mx-auto text-stone-950" size={18} /> : "Proceed to Secure Checkout"}
           </button>
         </div>
       </DialogContent>

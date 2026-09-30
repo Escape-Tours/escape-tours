@@ -8,7 +8,7 @@ const supabase = createClient(
 
 export async function fetchInventoryByRegion(regionTag: 'coastal' | 'southern' | 'northern') {
   const { data, error } = await supabase
-    .from('inventory_items')
+    .from('inventory')
     .select('*')
     .eq('region_tag', regionTag);
 
@@ -16,18 +16,26 @@ export async function fetchInventoryByRegion(regionTag: 'coastal' | 'southern' |
     throw new Error(`Failed to fetch inventory for region ${regionTag}: ${error.message}`);
   }
 
-  return data;
+  // Populate all possible location property keys to guarantee the frontend reads it
+  return (data || []).map(item => {
+    const resolvedLocation = item.location || item.region_tag || regionTag || 'Serengeti';
+    return {
+      ...item,
+      location: resolvedLocation,
+      region: resolvedLocation,
+      destination: resolvedLocation,
+    };
+  });
 }
 
 export async function validateItineraryDayStops(itemIds: string[]): Promise<boolean> {
   const { data, error } = await supabase
-    .from('inventory_items')
+    .from('inventory')
     .select('id, region_tag')
     .in('id', itemIds);
 
   if (error || !data) return false;
 
-  // Check if all items on this day belong to the exact same region tag
   const firstRegion = data[0]?.region_tag;
   const allSameRegion = data.every(item => item.region_tag === firstRegion);
 

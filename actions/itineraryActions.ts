@@ -77,6 +77,7 @@ export async function createBooking(payload: unknown) {
       insertPayload.park_fees_total = Number(new Decimal(data.park_fees_total).toFixed(2));
     }
     if (data.room_category) insertPayload.room_category = data.room_category;
+    if (data.residency_type) insertPayload.residency_type = data.residency_type;
     if (data.service_name) insertPayload.service_name = data.service_name;
     if (data.service_type) insertPayload.service_type = data.service_type;
 

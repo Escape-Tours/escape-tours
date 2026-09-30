@@ -1,3 +1,4 @@
+// app/api/pesapal/route.ts
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 
@@ -62,6 +63,11 @@ export async function POST(req: Request) {
       firstName = body.firstName;
       lastName = body.lastName;
       if (body.itemTitle) itemTitle = body.itemTitle;
+      // Support collective items description array if provided from storefront cart
+      if (body.description) itemTitle = body.description;
+      if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+        itemTitle = body.items.map((i: any) => i.title || i.name).join(', ');
+      }
     } else if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
       amount = formData.get('amount')?.toString() || '0';
@@ -81,7 +87,7 @@ export async function POST(req: Request) {
       currency: 'USD',
       amount: Number(amount),
       description: `${itemTitle} - Ref: ${safeItineraryId}`,
-      callback_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://escapetourstz.com'}/checkout/success`,
+      callback_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://escapetourstz.com'}/user-hub?pesapal_order_tracking_id=ESC-${Date.now()}`,
       notification_id: process.env.PESAPAL_IPN_ID?.trim(),
       billing_address: {
         email_address: email || 'customer@escapetourstz.com',
@@ -117,12 +123,12 @@ export async function POST(req: Request) {
       throw new Error(orderData.message || orderData.error?.message || 'Failed to submit order to PesaPal');
     }
 
-    // If submitted via standard HTML Form post (application/x-www-form-urlencoded), redirect immediately to Pesapal iframe/redirect URL
+    // If submitted via standard HTML Form post, redirect immediately to Pesapal iframe/redirect URL
     if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
       return NextResponse.redirect(orderData.redirect_url, { status: 303 });
     }
 
-    // Otherwise return JSON for client-side fetch submissions
+    // Otherwise return JSON for client-side fetch submissions from User Hub storefront cart
     return NextResponse.json({ 
       success: true, 
       redirect_url: orderData.redirect_url,
@@ -133,7 +139,7 @@ export async function POST(req: Request) {
     console.error('PesaPal Checkout Error:', error);
     const contentType = req.headers.get('content-type') || '';
     if (contentType.includes('application/x-www-form-urlencoded')) {
-      return NextResponse.redirect(new URL('/safaris?error=' + encodeURIComponent(error.message), req.url), { status: 303 });
+      return NextResponse.redirect(new URL('/user-hub?error=' + encodeURIComponent(error.message), req.url), { status: 303 });
     }
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

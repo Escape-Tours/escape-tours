@@ -1,3 +1,4 @@
+// components/booking-wrapper.tsx
 "use client";
 
 import { useState, useCallback } from "react";
@@ -24,7 +25,7 @@ export function BookingWrapper({
   const [isPreparing, setIsPreparing] = useState(false);
   
   // Track active pricing tier so the modal can sync and calculate totals correctly
-  const [activeTier, setActiveTier] = useState<Tier>((defaultTierId as Tier) || "INTERNATIONAL");
+  const [activeTier, setActiveTier] = useState<Tier>((defaultTierId as Tier) || "CITIZEN");
 
   const handleOpen = useCallback(() => {
     setIsPreparing(true);

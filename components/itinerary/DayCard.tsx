@@ -24,12 +24,15 @@ interface DayCardProps {
   onRemoveItem: (dayId: string, slotId: string) => void;
   onDeleteDay: (dayId: string) => void;
   residencyTier?: ResidencyTier;
-  guests: { adults: number; children: number };
+  guests?: { adults: number; children: number };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setGuests?: any;
 }
 
 const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, onRemove }: SlotRendererProps) {
+  const safeAdults = guests?.adults ?? 1;
+  const safeChildren = guests?.children ?? 0;
+
   const fee = useMemo(() => {
     if (!slot.item) return null;
     try {
@@ -37,8 +40,8 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
       const calculated: any = PricingEngine.calculate(slot.item, { 
         tier, 
         duration: 1, 
-        adults: guests.adults, 
-        children: guests.children, 
+        adults: safeAdults, 
+        children: safeChildren, 
         date: new Date().toISOString() 
       });
 
@@ -48,7 +51,7 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
 
       if (slot.item.price !== undefined && slot.item.price > 0) {
         return {
-          total: slot.item.price * (guests.adults + (guests.children * 0.5)),
+          total: slot.item.price * (safeAdults + (safeChildren * 0.5)),
           currency: slot.item.currency || 'USD',
           label: slot.item.name
         };
@@ -59,14 +62,14 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
       console.error("Pricing error:", e);
       if (slot.item.price !== undefined && slot.item.price > 0) {
         return {
-          total: slot.item.price * (guests.adults + (guests.children * 0.5)),
+          total: slot.item.price * (safeAdults + (safeChildren * 0.5)),
           currency: slot.item.currency || 'USD',
           label: slot.item.name
         };
       }
       return null;
     }
-  }, [slot.item, guests, tier]);
+  }, [slot.item, safeAdults, safeChildren, tier]);
 
   const getSlotConfig = (type: string) => {
     switch (type?.toUpperCase()) {
@@ -153,7 +156,7 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
             
             {fee && (
               <div className="text-[7px] text-slate-300 flex justify-between items-center bg-slate-900/90 px-2 py-1 rounded-lg border border-white/5 shadow-inner">
-                <span className="font-medium">{guests.adults} ADL {guests.children > 0 ? `+ ${guests.children} CHD` : ''}</span>
+                <span className="font-medium">{safeAdults} ADL {safeChildren > 0 ? `+ ${safeChildren} CHD` : ''}</span>
                 <span className="text-amber-300 font-bold uppercase tracking-wider bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">Tier Verified</span>
               </div>
             )}
@@ -173,10 +176,13 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
 SlotRenderer.displayName = 'SlotRenderer';
 
 function DayCard({ 
-  day, onMoveItem, onRemoveItem, onDeleteDay, residencyTier = 'INTERNATIONAL', guests 
+  day, onMoveItem, onRemoveItem, onDeleteDay, residencyTier = 'INTERNATIONAL', guests = { adults: 1, children: 0 } 
 }: DayCardProps) {
   const [isPending, startTransition] = useTransition();
   
+  const safeAdults = guests?.adults ?? 1;
+  const safeChildren = guests?.children ?? 0;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const storeItems = useItineraryStore((state: any) => state.items);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,8 +221,8 @@ function DayCard({
         const calculated: any = PricingEngine.calculate(droppedItem, { 
           tier: residencyTier, 
           duration: 1, 
-          adults: guests.adults, 
-          children: guests.children, 
+          adults: safeAdults, 
+          children: safeChildren, 
           date: new Date().toISOString() 
         });
 
@@ -327,7 +333,7 @@ function DayCard({
           <SlotRenderer 
             key={slot.id}
             slot={slot}
-            guests={guests}
+            guests={{ adults: safeAdults, children: safeChildren }}
             tier={residencyTier}
             onDrop={(e: React.DragEvent<HTMLDivElement>) => handleDrop(e, slot.id, slot.type)}
             onRemove={() => handleRemove(slot.id, slot.type, slot.item ?? null)}

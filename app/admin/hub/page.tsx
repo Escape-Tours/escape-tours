@@ -17,8 +17,10 @@ import {
   Search, 
   Loader2,
   Lock,
-  Database
+  Database,
+  Car
 } from 'lucide-react';
+import { DriverRideDispatches } from '@/components/admin/DriverRideDispatches';
 
 interface ItineraryBooking {
   id: string;
@@ -37,7 +39,7 @@ interface ItineraryBooking {
 }
 
 export default function MasterAdminHub() {
-  const [activeTab, setActiveTab] = useState<'master' | 'vendor' | 'staff'>('master');
+  const [activeTab, setActiveTab] = useState<'master' | 'vendor' | 'staff' | 'rides'>('master');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passcode, setPasscode] = useState('');
   const [authError, setAuthError] = useState(false);
@@ -154,7 +156,7 @@ export default function MasterAdminHub() {
           </div>
 
           {/* Subsections Switcher */}
-          <div className="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-2xl border border-amber-500/20 w-full md:w-auto">
+          <div className="flex items-center gap-1.5 bg-stone-950 p-1.5 rounded-2xl border border-amber-500/20 w-full md:w-auto flex-wrap">
             <button
               onClick={() => setActiveTab('master')}
               className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-serif font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -186,6 +188,17 @@ export default function MasterAdminHub() {
               }`}
             >
               <Users size={14} /> Staff Portal
+            </button>
+
+            <button
+              onClick={() => setActiveTab('rides')}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-xs font-serif font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === 'rides' 
+                  ? 'bg-amber-400 text-stone-950 shadow-md' 
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Car size={14} /> Driver Dispatches
             </button>
           </div>
         </div>
@@ -395,6 +408,27 @@ export default function MasterAdminHub() {
                     </li>
                   </ul>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUBSECTION 4: UBER-STYLE DRIVER DISPATCHES */}
+        {activeTab === 'rides' && (
+          <div className="space-y-6">
+            <div className="bg-stone-900/90 rounded-[2.5rem] border border-amber-500/20 p-6 sm:p-8 shadow-2xl space-y-6">
+              <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-stone-100 uppercase tracking-widest">Driver Portal Dispatch Mirror</h3>
+                  <p className="text-xs text-stone-400 font-serif mt-1">Live airport arrival ride requests, distance calculation, and direct driver acceptance feeds.</p>
+                </div>
+                <div className="px-3 py-1 bg-amber-500/10 rounded-xl border border-amber-500/30 text-amber-300 text-xs font-serif font-bold uppercase">
+                  Live Dispatch Active
+                </div>
+              </div>
+
+              <div className="text-stone-300">
+                <DriverRideDispatches driverId="master-admin-driver-id" />
               </div>
             </div>
           </div>

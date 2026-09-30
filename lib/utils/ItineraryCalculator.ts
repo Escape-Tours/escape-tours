@@ -18,7 +18,7 @@ export interface BookingResult {
  */
 const getBaseRate = (
   date: Date,
-  categoryData: any, // The specific room object (e.g., hotel.room_prices["Suite Room"])
+  categoryData: Record<string, any>, // Properly typed object to prevent implicit 'any' indexing errors
   adults: number,
   children: number,
   residency: ResidencyTier
@@ -28,20 +28,18 @@ const getBaseRate = (
   const seasonKey = isHighSeason ? 'high' : 'low';
 
   // 1. Determine occupancy key (e.g., "Double", "Triple")
-  // Fallback logic if the exact key isn't found
   const totalGuests = adults + children;
   const occupancyKey = totalGuests >= 4 ? "Quadruple" : 
                        totalGuests === 3 ? "Triple" : 
                        totalGuests === 2 ? "Double" : "Single";
 
-  // 2. Navigate: Occupancy -> Season -> Residency
-  const seasonData = categoryData?.[occupancyKey]?.[seasonKey] ?? 
-                     Object.values(categoryData)[0]?.[seasonKey] ?? 
-                     {};
+  // 2. Navigate safely with typed lookups: Occupancy -> Season -> Residency
+  const occupancyData = categoryData?.[occupancyKey] ?? Object.values(categoryData)[0] ?? {};
+  const seasonData = occupancyData[seasonKey] ?? {};
 
   const rate = seasonData[residency] ?? seasonData['INTERNATIONAL'] ?? 0;
 
-  return rate;
+  return typeof rate === 'number' ? rate : Number(rate) || 0;
 };
 
 export const calculateBookingDetails = (

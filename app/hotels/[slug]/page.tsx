@@ -1,7 +1,8 @@
+// app/hotels/[slug]/page.tsx
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, ShieldCheck } from "lucide-react";
+import { MapPin, ShieldCheck, Globe } from "lucide-react";
 import { Metadata } from "next";
 
 import { createClient } from '@/lib/supabase/server';
@@ -13,7 +14,7 @@ type Params = Promise<{ slug: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
-  return { title: `Stay at ${slug.replace(/-/g, ' ')} | Luxury Accommodation` };
+  return { title: `Stay at ${slug.replace(/-/g, ' ')} | Escape Tours & Safaris` };
 }
 
 export default async function HotelSlugPage({ params }: { params: Params }) {
@@ -41,55 +42,70 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
   const envData = safeParse(hotel.lodge_environment);
 
   return (
-    <main className="min-h-screen bg-white">
-      <section className="relative h-[60vh] flex items-end">
+    <main className="min-h-screen bg-stone-50">
+      {/* Hero Section */}
+      <section className="relative h-[65vh] flex items-end">
         {typeof hotel.image === 'string' && hotel.image.trim().length > 5 && (
           <Image 
             src={hotel.image} 
-            alt={hotel.name ?? "Hotel"} 
+            alt={hotel.name ?? "Luxury Lodge"} 
             fill 
             className="object-cover" 
             priority 
             sizes="100vw" 
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-        <div className="relative max-w-7xl mx-auto p-10 w-full text-white">
-          <h1 className="text-5xl md:text-7xl font-black mb-4">{hotel.name}</h1>
-          <p className="flex items-center gap-2 text-amber-400 text-lg font-medium">
-            <MapPin size={20} /> {hotel.location ?? "Tanzania"}
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/80 via-stone-950/30 to-transparent" />
+        <div className="relative max-w-7xl mx-auto p-10 w-full text-white space-y-3">
+          <div className="flex items-center gap-2 text-amber-400 font-bold uppercase tracking-[0.2em] text-xs">
+            <Globe size={14} /> Featured Itinerary Sanctuary
+          </div>
+          <h1 className="text-4xl md:text-6xl font-serif tracking-tight">{hotel.name}</h1>
+          <p className="flex items-center gap-2 text-stone-200 text-base font-medium">
+            <MapPin size={18} className="text-amber-400" /> {hotel.location ?? "Tanzania Safari Circuit"}
           </p>
-          <div className="mt-6 flex items-center gap-2 text-white/90">
-            <ShieldCheck size={20} className="text-emerald-400" />
-            <span className="text-sm font-medium tracking-wide uppercase">Hand-picked Luxury Selection</span>
+          <div className="pt-2 flex items-center gap-2 text-stone-300">
+            <ShieldCheck size={18} className="text-emerald-400" />
+            <span className="text-xs font-semibold tracking-wider uppercase">Verified Luxury Partner Property</span>
           </div>
         </div>
       </section>
 
-      <section className="py-20 max-w-7xl mx-auto px-6">
-        <h2 className="text-4xl font-black mb-16 text-center">Our Sanctuaries</h2>
+      {/* Room Categories Section */}
+      <section className="py-24 max-w-7xl mx-auto px-6">
+        <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
+          <span className="text-amber-700 text-xs font-bold uppercase tracking-[0.25em]">Accommodations</span>
+          <h2 className="text-4xl font-serif text-stone-900">Sanctuaries & Suites</h2>
+          <p className="text-stone-600 text-sm">Select your preferred room configuration below to proceed with your booking calculation.</p>
+        </div>
+
         <div className="space-y-20">
           {(hotel.room_categories ?? []).map((cat: string, index: number) => (
-            <div key={cat} className={`grid md:grid-cols-2 gap-10 items-center ${index % 2 !== 0 ? 'md:flex-row-reverse' : ''}`}>
-              <div className="relative h-80 w-full overflow-hidden rounded-2xl shadow-xl bg-gray-100">
+            <div key={cat} className={`grid md:grid-cols-2 gap-12 items-center bg-white p-8 rounded-[2.5rem] border border-stone-200/60 shadow-xl shadow-stone-200/40 ${index % 2 !== 0 ? 'md:flex-row-reverse' : ''}`}>
+              <div className="relative h-80 w-full overflow-hidden rounded-3xl shadow-inner bg-stone-100">
                 {roomImages[cat] && typeof roomImages[cat] === 'string' && (
-                  <Image src={roomImages[cat]} alt={cat} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+                  <Image src={roomImages[cat]} alt={cat} fill className="object-cover hover:scale-105 transition-transform duration-700" sizes="(max-width: 768px) 100vw, 50vw" />
                 )}
               </div>
               <div className="space-y-6">
-                <h3 className="text-3xl font-bold">{cat}</h3>
-                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-amber-800/80">Room Category</span>
+                  <h3 className="text-3xl font-serif text-stone-900">{cat}</h3>
+                </div>
+                
+                <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200/60">
                   {renderPrice(prices[cat])}
                 </div>
-                <div className="flex gap-4">
+
+                <div className="flex flex-wrap gap-4 pt-2">
                   <BookingWrapper 
                     hotelName={hotel.name ?? ""} 
                     category={cat} 
                     hotel={hotel}
-                    defaultTierId="INTERNATIONAL" 
+                    defaultTierId="CITIZEN" 
                   />
-                  <Button variant="outline" size="lg" asChild>
-                    <Link href="/itinerary-builder">Add to Itinerary</Link>
+                  <Button variant="outline" size="lg" className="rounded-xl border-stone-300 font-semibold text-stone-700 hover:bg-stone-100" asChild>
+                    <Link href="/itinerary-builder">Add to Itinerary Builder</Link>
                   </Button>
                 </div>
               </div>
@@ -98,18 +114,23 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
         </div>
       </section>
 
-      <section className="py-20 bg-gray-50 border-t">
-        <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-3xl font-black mb-6 text-center">Lodge Environment</h2>
-          <p className="text-gray-600 text-center mb-12 max-w-2xl mx-auto leading-relaxed">
-            {envData.description ?? "Immerse yourself in the tranquility of the surrounding landscape."}
-          </p>
+      {/* Lodge Environment Section */}
+      <section className="py-24 bg-stone-900 text-white border-t border-stone-800">
+        <div className="max-w-6xl mx-auto px-6 space-y-12">
+          <div className="text-center max-w-2xl mx-auto space-y-3">
+            <span className="text-amber-400 text-xs font-bold uppercase tracking-[0.25em]">Surroundings</span>
+            <h2 className="text-3xl md:text-4xl font-serif">Lodge Environment & Wilderness</h2>
+            <p className="text-stone-400 text-sm leading-relaxed">
+              {envData.description ?? "Immerse yourself in the tranquility of the surrounding landscape and untamed wildlife."}
+            </p>
+          </div>
+
           {envData.images && Array.isArray(envData.images) && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
               {envData.images.map((url: string, idx: number) => (
-                <div key={idx} className="relative h-64 rounded-xl overflow-hidden shadow-md">
+                <div key={idx} className="relative h-72 rounded-3xl overflow-hidden shadow-2xl border border-stone-800">
                    {url && typeof url === 'string' && (
-                     <Image src={url} alt="Env" fill className="object-cover" sizes="(max-width: 768px) 50vw, 33vw" />
+                     <Image src={url} alt="Lodge Environment" fill className="object-cover hover:scale-105 transition-transform duration-700" sizes="(max-width: 768px) 50vw, 33vw" />
                    )}
                 </div>
               ))}
@@ -117,42 +138,43 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
           )}
         </div>
       </section>
+      
       <WhatsAppFloat />
     </main>
   );
 }
 
 function renderPrice(priceData: unknown): React.ReactNode {
-  if (!priceData) return <span className="text-gray-400 italic">Price on request</span>;
+  if (!priceData) return <span className="text-stone-400 italic text-sm">Price on request</span>;
 
   if (typeof priceData === 'number' || !isNaN(Number(priceData))) {
-    return <span className="text-2xl font-black text-[#d97706]">${Number(priceData).toLocaleString()} / night</span>;
+    return <span className="text-2xl font-serif font-bold text-amber-700">${Number(priceData).toLocaleString()} <span className="text-xs font-sans text-stone-500 font-normal">/ night</span></span>;
   }
 
   if (typeof priceData === 'object' && priceData !== null) {
     const entries = Object.entries(priceData);
-    if (entries.length === 0) return <span className="text-gray-400 italic">Price on request</span>;
+    if (entries.length === 0) return <span className="text-stone-400 italic text-sm">Price on request</span>;
 
     return (
       <div className="space-y-4">
         {entries.map(([seasonKey, seasonVal]) => {
           if (typeof seasonVal === 'object' && seasonVal !== null) {
             return (
-              <div key={seasonKey} className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500 block border-b pb-1">
-                  {seasonKey} Season
+              <div key={seasonKey} className="space-y-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block border-b border-stone-200 pb-1.5">
+                  {seasonKey} Season Rates
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {Object.entries(seasonVal as Record<string, unknown>).map(([occupancyKey, occupancyVal]) => {
                     if (typeof occupancyVal === 'object' && occupancyVal !== null) {
                       return (
-                        <div key={occupancyKey} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm space-y-1">
-                          <span className="text-[10px] font-black tracking-wider uppercase text-gray-400 block">{occupancyKey} Room</span>
+                        <div key={occupancyKey} className="bg-white p-3.5 rounded-xl border border-stone-200/80 shadow-sm space-y-1.5">
+                          <span className="text-[10px] font-black tracking-wider uppercase text-stone-400 block">{occupancyKey}</span>
                           <div className="space-y-1 pt-1">
                             {Object.entries(occupancyVal as Record<string, unknown>).map(([residencyKey, finalPrice]) => (
                               <div key={residencyKey} className="flex justify-between items-center text-xs">
-                                <span className="text-gray-600 font-medium capitalize">{residencyKey.toLowerCase()}:</span>
-                                <span className="text-[#d97706] font-bold">
+                                <span className="text-stone-600 font-medium capitalize">{residencyKey.toLowerCase()}:</span>
+                                <span className="text-amber-700 font-bold">
                                   ${typeof finalPrice === 'number' ? finalPrice.toLocaleString() : String(finalPrice)}
                                 </span>
                               </div>
@@ -163,9 +185,9 @@ function renderPrice(priceData: unknown): React.ReactNode {
                     }
 
                     return (
-                      <div key={occupancyKey} className="flex justify-between items-center text-sm font-semibold text-gray-700 bg-white p-2.5 rounded border border-gray-100 shadow-sm">
-                        <span className="uppercase text-[11px] text-gray-500">{occupancyKey}:</span>
-                        <span className="text-[#d97706] font-bold">
+                      <div key={occupancyKey} className="flex justify-between items-center text-sm font-semibold text-stone-700 bg-white p-3 rounded-xl border border-stone-200/80 shadow-sm">
+                        <span className="uppercase text-[11px] text-stone-500">{occupancyKey}:</span>
+                        <span className="text-amber-700 font-bold">
                           ${typeof occupancyVal === 'number' ? occupancyVal.toLocaleString() : String(occupancyVal)}
                         </span>
                       </div>
@@ -177,9 +199,9 @@ function renderPrice(priceData: unknown): React.ReactNode {
           }
 
           return (
-            <div key={seasonKey} className="flex justify-between items-center text-lg font-bold text-gray-700">
+            <div key={seasonKey} className="flex justify-between items-center text-lg font-serif font-bold text-stone-800">
               <span className="capitalize">{seasonKey}:</span>
-              <span className="text-[#d97706]">${typeof seasonVal === 'number' ? seasonVal.toLocaleString() : String(seasonVal)} / night</span>
+              <span className="text-amber-700">${typeof seasonVal === 'number' ? seasonVal.toLocaleString() : String(seasonVal)} <span className="text-xs font-sans text-stone-500 font-normal">/ night</span></span>
             </div>
           );
         })}
@@ -187,5 +209,5 @@ function renderPrice(priceData: unknown): React.ReactNode {
     );
   }
 
-  return <span className="text-gray-400 italic">Price on request</span>;
+  return <span className="text-stone-400 italic text-sm">Price on request</span>;
 }
