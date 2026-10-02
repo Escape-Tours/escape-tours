@@ -2,7 +2,7 @@
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, ShieldCheck, Globe } from "lucide-react";
+import { MapPin, ShieldCheck, Globe, Calendar } from "lucide-react";
 import { Metadata } from "next";
 
 import { createClient } from '@/lib/supabase/server';
@@ -15,6 +15,15 @@ type Params = Promise<{ slug: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
   return { title: `Stay at ${slug.replace(/-/g, ' ')} | Escape Tours & Safaris` };
+}
+
+// Automated season detector based on East African safari patterns (High: Jun-Oct & Jan-Feb; Low: Mar-May & Nov-Dec)
+function getCurrentSeason(date: Date = new Date()): 'high' | 'low' {
+  const month = date.getMonth(); // 0-indexed (0 = Jan, 11 = Dec)
+  if ((month >= 0 && month <= 1) || (month >= 5 && month <= 9)) {
+    return 'high';
+  }
+  return 'low';
 }
 
 export default async function HotelSlugPage({ params }: { params: Params }) {
@@ -40,6 +49,10 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
   const prices = safeParse(hotel.room_prices);
   const roomImages = safeParse(hotel.room_images);
   const envData = safeParse(hotel.lodge_environment);
+
+  // Automatically determine season based on current date
+  const activeSeason = getCurrentSeason();
+  const activeSeasonKey = activeSeason === 'high' ? 'High' : 'Low';
 
   return (
     <main className="min-h-screen bg-stone-50">
@@ -77,6 +90,11 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
           <span className="text-amber-700 text-xs font-bold uppercase tracking-[0.25em]">Accommodations</span>
           <h2 className="text-4xl font-serif text-stone-900">Sanctuaries & Suites</h2>
           <p className="text-stone-600 text-sm">Select your preferred room configuration below to proceed with your booking calculation.</p>
+          
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs font-bold tracking-wide mt-2">
+            <Calendar size={14} />
+            System Auto-Selected: {activeSeasonKey} Season Rates ({new Date().toLocaleDateString()})
+          </div>
         </div>
 
         <div className="space-y-20">
@@ -94,7 +112,7 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
                 </div>
                 
                 <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200/60">
-                  {renderPrice(prices[cat])}
+                  {renderActiveSeasonPrice(prices[cat], activeSeasonKey)}
                 </div>
 
                 <div className="flex flex-wrap gap-4 pt-2">
@@ -144,7 +162,7 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
   );
 }
 
-function renderPrice(priceData: unknown): React.ReactNode {
+function renderActiveSeasonPrice(priceData: unknown, targetSeason: string): React.ReactNode {
   if (!priceData) return <span className="text-stone-400 italic text-sm">Price on request</span>;
 
   if (typeof priceData === 'number' || !isNaN(Number(priceData))) {
@@ -155,56 +173,56 @@ function renderPrice(priceData: unknown): React.ReactNode {
     const entries = Object.entries(priceData);
     if (entries.length === 0) return <span className="text-stone-400 italic text-sm">Price on request</span>;
 
-    return (
-      <div className="space-y-4">
-        {entries.map(([seasonKey, seasonVal]) => {
-          if (typeof seasonVal === 'object' && seasonVal !== null) {
-            return (
-              <div key={seasonKey} className="space-y-3">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block border-b border-stone-200 pb-1.5">
-                  {seasonKey} Season Rates
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {Object.entries(seasonVal as Record<string, unknown>).map(([occupancyKey, occupancyVal]) => {
-                    if (typeof occupancyVal === 'object' && occupancyVal !== null) {
-                      return (
-                        <div key={occupancyKey} className="bg-white p-3.5 rounded-xl border border-stone-200/80 shadow-sm space-y-1.5">
-                          <span className="text-[10px] font-black tracking-wider uppercase text-stone-400 block">{occupancyKey}</span>
-                          <div className="space-y-1 pt-1">
-                            {Object.entries(occupancyVal as Record<string, unknown>).map(([residencyKey, finalPrice]) => (
-                              <div key={residencyKey} className="flex justify-between items-center text-xs">
-                                <span className="text-stone-600 font-medium capitalize">{residencyKey.toLowerCase()}:</span>
-                                <span className="text-amber-700 font-bold">
-                                  ${typeof finalPrice === 'number' ? finalPrice.toLocaleString() : String(finalPrice)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+    // Find the entry matching the active season (case-insensitive search, fallback to first entry if not found)
+    const matchingEntry = entries.find(([key]) => key.toLowerCase().includes(targetSeason.toLowerCase())) || entries[0];
+    const [seasonKey, seasonVal] = matchingEntry;
+
+    if (typeof seasonVal === 'object' && seasonVal !== null) {
+      return (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center border-b border-stone-200 pb-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+              {seasonKey} Season Rates (Active)
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {Object.entries(seasonVal as Record<string, unknown>).map(([occupancyKey, occupancyVal]) => {
+              if (typeof occupancyVal === 'object' && occupancyVal !== null) {
+                return (
+                  <div key={occupancyKey} className="bg-white p-3.5 rounded-xl border border-stone-200/85 shadow-sm space-y-1.5">
+                    <span className="text-[10px] font-black tracking-wider uppercase text-stone-400 block">{occupancyKey}</span>
+                    <div className="space-y-1 pt-1">
+                      {Object.entries(occupancyVal as Record<string, unknown>).map(([residencyKey, finalPrice]) => (
+                        <div key={residencyKey} className="flex justify-between items-center text-xs">
+                          <span className="text-stone-600 font-medium capitalize">{residencyKey.toLowerCase()}:</span>
+                          <span className="text-amber-700 font-bold">
+                            ${typeof finalPrice === 'number' ? finalPrice.toLocaleString() : String(finalPrice)}
+                          </span>
                         </div>
-                      );
-                    }
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
 
-                    return (
-                      <div key={occupancyKey} className="flex justify-between items-center text-sm font-semibold text-stone-700 bg-white p-3 rounded-xl border border-stone-200/80 shadow-sm">
-                        <span className="uppercase text-[11px] text-stone-500">{occupancyKey}:</span>
-                        <span className="text-amber-700 font-bold">
-                          ${typeof occupancyVal === 'number' ? occupancyVal.toLocaleString() : String(occupancyVal)}
-                        </span>
-                      </div>
-                    );
-                  })}
+              return (
+                <div key={occupancyKey} className="flex justify-between items-center text-sm font-semibold text-stone-700 bg-white p-3 rounded-xl border border-stone-200/85 shadow-sm">
+                  <span className="uppercase text-[11px] text-stone-500">{occupancyKey}:</span>
+                  <span className="text-amber-700 font-bold">
+                    ${typeof occupancyVal === 'number' ? occupancyVal.toLocaleString() : String(occupancyVal)}
+                  </span>
                 </div>
-              </div>
-            );
-          }
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
 
-          return (
-            <div key={seasonKey} className="flex justify-between items-center text-lg font-serif font-bold text-stone-800">
-              <span className="capitalize">{seasonKey}:</span>
-              <span className="text-amber-700">${typeof seasonVal === 'number' ? seasonVal.toLocaleString() : String(seasonVal)} <span className="text-xs font-sans text-stone-500 font-normal">/ night</span></span>
-            </div>
-          );
-        })}
+    return (
+      <div className="flex justify-between items-center text-lg font-serif font-bold text-stone-800">
+        <span className="capitalize">{seasonKey} (Active):</span>
+        <span className="text-amber-700">${typeof seasonVal === 'number' ? seasonVal.toLocaleString() : String(seasonVal)} <span className="text-xs font-sans text-stone-500 font-normal">/ night</span></span>
       </div>
     );
   }
