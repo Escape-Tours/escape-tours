@@ -258,3 +258,92 @@ export const TOP_ZANZIBAR_ACCOMMODATIONS: AccommodationItem[] = [
     description: 'The ultimate heritage luxury destination located right on the beachfront of Stone Town, blending historic Swahili architecture with modern five-star elegance.'
   }
 ];
+
+// --- Lifestyle Hub: After Hours Venues Catalog ---
+export interface AfterHoursVenue {
+  id: string;
+  name: string;
+  region: 'Dar es Salaam' | 'Karatu' | 'Arusha' | 'Moshi' | 'Serengeti';
+  category: 'Club' | 'Lounge' | 'Bush Party' | 'Beach Club';
+  description: string;
+  vibe: string;
+  location: string;
+  perks: string;
+  imageUrl: string;
+  featuredDj?: string;
+  price: TieredPrice | number;
+}
+
+export const AFTER_HOURS_VENUES: AfterHoursVenue[] = [
+  {
+    id: 'elements-dar',
+    name: 'Elements Masaki',
+    region: 'Dar es Salaam',
+    category: 'Club',
+    description: 'Dar es Salaam’s premier upscale nightclub experience. High-energy beats, stylish crowd, and world-class weekend sets in the heart of Masaki.',
+    vibe: 'Electric, High-End, Cosmopolitan',
+    location: 'Masaki, Dar es Salaam',
+    perks: 'Priority weekend entry & reserved VIP table access via Escape Pass',
+    imageUrl: '/images/lifestyle/elements.jpg',
+    price: {
+      CITIZEN: 20,
+      RESIDENT: 30,
+      INTERNATIONAL: 50
+    }
+  },
+  {
+    id: 'golden-sparrow-karatu',
+    name: 'Golden Sparrow Lounge',
+    region: 'Karatu',
+    category: 'Lounge',
+    description: 'The ultimate wind-down spot after a dusty day exploring the Northern Circuit. Great local music, cold drinks, and authentic community energy.',
+    vibe: 'Relaxed, Social, Authentic Local Vibe',
+    location: 'Karatu Town Center',
+    perks: 'Complimentary welcome drink & reserved seating for Escape Tours guests',
+    imageUrl: '/images/lifestyle/golden-sparrow.jpg',
+    featuredDj: 'Resident Club DJ',
+    price: {
+      CITIZEN: 10,
+      RESIDENT: 15,
+      INTERNATIONAL: 25
+    }
+  }
+];
+
+// --- Lifestyle Hub: Bush Parties & Pop-up Events Catalog ---
+export const BUSH_PARTIES_CATALOG: AfterHoursVenue[] = [
+  {
+    id: 'serengeti-starlight-bush-party',
+    name: 'Serengeti Starlight Bonfire & Beats',
+    region: 'Serengeti',
+    category: 'Bush Party',
+    description: 'An exclusive open-air gathering under the African stars. Deep tribal house and Afrobeat sound systems set up deep within protected concession areas.',
+    vibe: 'Immersive, Wild, Exclusive Pop-up',
+    location: 'Serengeti Border Concession',
+    perks: 'Armed security escort, open premium bar, and VIP firepit access',
+    imageUrl: '/images/lifestyle/bush-party-serengeti.jpg',
+    featuredDj: 'Guest Circuit DJ',
+    price: {
+      CITIZEN: 75,
+      RESIDENT: 100,
+      INTERNATIONAL: 150
+    }
+  },
+  {
+    id: 'manyara-crater-edge-bash',
+    name: 'Rift Valley Escarpment Sundowner & Bonfire',
+    region: 'Karatu',
+    category: 'Bush Party',
+    description: 'A sunset-to-midnight pop-up celebration perched right on the edge of the Great Rift Valley escarpment overlooking Lake Manyara.',
+    vibe: 'Breathtaking, Social, High-Energy',
+    location: 'Manyara Escarpment Rim',
+    perks: 'Complimentary craft cocktails & private viewing platform access',
+    imageUrl: '/images/lifestyle/bush-party-manyara.jpg',
+    featuredDj: 'Karatu Resident Sound',
+    price: {
+      CITIZEN: 50,
+      RESIDENT: 70,
+      INTERNATIONAL: 120
+    }
+  }
+];

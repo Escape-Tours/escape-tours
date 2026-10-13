@@ -17,6 +17,10 @@ async function getPesaPalToken() {
   const cleanKey = process.env.PESAPAL_CONSUMER_KEY?.trim();
   const cleanSecret = process.env.PESAPAL_CONSUMER_SECRET?.trim();
 
+  if (!cleanKey || !cleanSecret) {
+    throw new Error("Missing PesaPal consumer key or secret environment variables.");
+  }
+
   const response = await fetch(`${BASE_URL}/api/Auth/RequestToken`, {
     method: 'POST',
     headers: {
@@ -39,7 +43,7 @@ async function getPesaPalToken() {
     return data.token;
   } catch (e: any) {
     console.error("PesaPal returned non-JSON response during auth:", textResponse);
-    throw new Error("PesaPal live server returned an invalid response during token generation. Check your live consumer key and secret.");
+    throw new Error("PesaPal server returned an invalid response during token generation. Check your consumer key and secret.");
   }
 }
 
@@ -61,7 +65,6 @@ export async function GET(req: Request) {
       console.log("FETCHED BOOKING RECORD FOR CHECKOUT:", JSON.stringify(booking, null, 2));
       if (booking.total_amount) amount = String(booking.total_amount);
       
-      // Check all potential tier column variations
       const rawTier = booking.residency_type || booking.residency_tier || booking.tier;
       if (rawTier) {
         residencyTier = String(rawTier).toUpperCase();
@@ -196,6 +199,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Total amount must be greater than zero' }, { status: 400 });
     }
 
+    const ipnId = process.env.PESAPAL_IPN_ID?.trim();
+    if (!ipnId) {
+      return NextResponse.json({ error: 'Missing PESAPAL_IPN_ID environment variable on Netlify.' }, { status: 500 });
+    }
+
     const nameParts = customerName.trim().split(' ');
     const firstName = nameParts[0] || 'Escape';
     const lastName = nameParts.slice(1).join(' ') || 'Customer';
@@ -208,7 +216,7 @@ export async function POST(req: Request) {
       amount: Number(totalAmount.toFixed(2)),
       description: `Escape Tours Payment (${activeTier})`,
       callback_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://escapetourstz.com'}/api/payment-callback`,
-      notification_id: process.env.PESAPAL_IPN_ID?.trim(),
+      notification_id: ipnId,
       billing_address: {
         email_address: customerEmail,
         phone_number: customerPhone,

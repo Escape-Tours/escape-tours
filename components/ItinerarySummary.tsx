@@ -1,68 +1,96 @@
+// components/ItinerarySummary.tsx
 'use client';
 
-import React, { useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, CalendarDays, ArrowRight } from 'lucide-react';
+import React from 'react';
 import { useItineraryStore } from '@/store/useItineraryStore';
+import { motion } from 'framer-motion';
 
 export function ItinerarySummary() {
-  const { items, removeItem, totalPrice } = useItineraryStore();
+  const { 
+    totalDays, 
+    rejectedCarDays, 
+    rejectCarForDay, 
+    getCostBreakdown 
+  } = useItineraryStore();
 
-  // Group items by day and timeSlot
-  const groupedItinerary = useMemo(() => {
-    const groups: any = {};
-    items.forEach((item) => {
-      if (!groups[item.dayId!]) groups[item.dayId!] = { MORNING: [], AFTERNOON: [], EVENING: [] };
-      if (item.timeSlot) {
-        groups[item.dayId!][item.timeSlot].push(item);
+  const breakdown = getCostBreakdown();
+  
+  // Check if all active days have their car rejected, or toggle for day 1 by default
+  const isCarRejected = totalDays > 0 && Array.from({ length: totalDays }, (_, i) => i + 1).every(dayId => rejectedCarDays.includes(dayId));
+
+  const handleVehicleToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    // Toggle car rejection for all active days 1 to totalDays
+    for (let dayId = 1; dayId <= totalDays; dayId++) {
+      const isCurrentlyRejected = rejectedCarDays.includes(dayId);
+      if (checked && !isCurrentlyRejected) {
+        rejectCarForDay(dayId);
+      } else if (!checked && isCurrentlyRejected) {
+        // If unchecked, we remove it from rejectedCarDays by resetting or toggling
+        // Since useItineraryStore has rejectCarForDay, let's make sure it handles re-adding if needed
       }
-    });
-    return groups;
-  }, [items]);
+    }
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100">
-      <div className="flex items-center gap-3 mb-6">
-        <CalendarDays className="text-amber-600" size={28} />
-        <h2 className="text-3xl font-black text-gray-900">Your Escape</h2>
-      </div>
-
-      <div className="space-y-6 overflow-y-auto max-h-[60vh]">
-        {Object.keys(groupedItinerary).length === 0 ? (
-          <p className="text-gray-500 italic text-center py-10">No items added yet. Drag items to your daily itinerary.</p>
-        ) : (
-          Object.entries(groupedItinerary).map(([day, slots]: [any, any]) => (
-            <div key={day} className="space-y-2">
-              <h3 className="text-xs font-black text-amber-600 uppercase tracking-widest">Day {day}</h3>
-              {Object.entries(slots).map(([slotName, slotItems]: [any, any]) => (
-                slotItems.length > 0 && (
-                  <div key={slotName} className="pl-4 border-l-2 border-gray-100">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">{slotName}</p>
-                    {slotItems.map((item: any) => (
-                      <div key={item.id} className="flex justify-between items-center py-2">
-                        <span className="text-sm font-bold">{item.name}</span>
-                        <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ))}
-            </div>
-          ))
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-white max-w-xl w-full shadow-2xl"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <label className="flex items-center space-x-3 cursor-pointer">
+          <input 
+            type="checkbox" 
+            checked={isCarRejected}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              for (let dayId = 1; dayId <= totalDays; dayId++) {
+                const isRejected = rejectedCarDays.includes(dayId);
+                if (checked && !isRejected) {
+                  rejectCarForDay(dayId);
+                } else if (!checked && isRejected) {
+                  // To re-include, we clear or toggle rejectedCarDays
+                  useItineraryStore.setState((state) => ({
+                    rejectedCarDays: state.rejectedCarDays.filter(d => d !== dayId)
+                  }));
+                }
+              }
+            }}
+            className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500"
+          />
+          <span className="text-sm font-medium text-zinc-300">I have my own vehicle</span>
+        </label>
+        {!isCarRejected && (
+          <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded-full border border-amber-500/20">
+            Includes 4x4 Safari Car ($350)
+          </span>
         )}
       </div>
-      
-      {items.length > 0 && (
-        <div className="mt-8 pt-6 border-t border-gray-100">
-          <div className="flex justify-between items-center mb-6">
-            <span className="text-gray-500 font-medium">Total Estimate</span>
-            <span className="text-3xl font-black">${totalPrice().toLocaleString()}</span>
-          </div>
-          <button className="w-full bg-black text-white py-4 rounded-2xl font-black hover:bg-gray-800 transition-all">
-            Request Booking <ArrowRight size={20} />
-          </button>
+
+      <div className="space-y-2 border-t border-zinc-800 pt-4 text-sm text-zinc-400">
+        <div className="flex justify-between">
+          <span>Subtotal</span>
+          <span className="text-white font-semibold">${breakdown.subtotal}</span>
         </div>
-      )}
+        <div className="flex justify-between">
+          <span>VAT (18%)</span>
+          <span className="text-white font-semibold">+${breakdown.vat}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Agency Fee</span>
+          <span className="text-white font-semibold">+${breakdown.agencyFee}</span>
+        </div>
+      </div>
+
+      <div className="border-t border-zinc-800 mt-4 pt-4 flex items-center justify-between">
+        <span className="text-base font-bold text-white">GRAND TOTAL (INC. VAT & FEES)</span>
+        <span className="text-2xl font-extrabold text-amber-400">${breakdown.grandTotal}</span>
+      </div>
+
+      <button className="w-full mt-6 bg-amber-500 hover:bg-amber-600 text-black font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-amber-500/20">
+        PROCEED TO SECURE CHECKOUT
+      </button>
     </motion.div>
   );
 }

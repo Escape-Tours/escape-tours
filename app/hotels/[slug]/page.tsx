@@ -1,22 +1,17 @@
 // app/hotels/[slug]/page.tsx
-import { notFound } from "next/navigation";
+"use client";
+
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, ShieldCheck, Globe, Calendar } from "lucide-react";
-import { Metadata } from "next";
+import { MapPin, ShieldCheck, Globe, Calendar, Play } from "lucide-react";
+import { useParams } from "next/navigation";
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from "@/components/ui/button";
 import { BookingWrapper } from "@/components/booking-wrapper";
+import { VideoModal } from "@/components/video-modal";
 import WhatsAppFloat from "@/components/whatsapp-float";
-
-type Params = Promise<{ slug: string }>;
-
-export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const { slug } = await params;
-  const cleanSlug = typeof slug === 'string' ? slug : 'sanctuary';
-  return { title: `Stay at ${cleanSlug.replace(/-/g, ' ')} | Escape Tours & Safaris` };
-}
 
 // Automated season detector based on East African safari patterns (High: Jun-Oct & Jan-Feb; Low: Mar-May & Nov-Dec)
 function getCurrentSeason(date: Date = new Date()): 'high' | 'low' {
@@ -27,40 +22,50 @@ function getCurrentSeason(date: Date = new Date()): 'high' | 'low' {
   return 'low';
 }
 
-export default async function HotelSlugPage({ params }: { params: Params }) {
-  const { slug } = await params;
-  
-  let hotel: any = null;
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('hotels')
-      .select('*')
-      .eq('slug', slug)
-      .single();
+export default function HotelSlugPage() {
+  const params = useParams();
+  const slug = params?.slug as string;
 
-    if (!error && data) {
-      hotel = data;
+  const [loading, setLoading] = useState(true);
+  const [hotel, setHotel] = useState<any>(null);
+  const [isVideoOpen, setIsVideoOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchHotelData() {
+      if (!slug) return;
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('hotels')
+          .select('*')
+          .eq('slug', slug)
+          .single();
+
+        if (!error && data) {
+          setHotel(data);
+        }
+      } catch (err) {
+        console.warn("Supabase fetch exception on hotel slug page:", err);
+      }
+      setLoading(false);
     }
-  } catch (err) {
-    console.warn("Supabase fetch exception on hotel slug page:", err);
-  }
+    fetchHotelData();
+  }, [slug]);
 
   // Fallback fallback if offline or record not found in DB
-  if (!hotel) {
-    hotel = {
-      name: slug ? slug.replace(/-/g, ' ').toUpperCase() : 'Luxury Sanctuary',
-      location: 'Tanzania Safari Circuit',
-      image: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80',
-      room_categories: ['Standard Suite', 'Deluxe Villa'],
-      room_prices: {
-        'Standard Suite': { High: { CITIZEN: 250, RESIDENT: 300, INTERNATIONAL: 450 }, Low: { CITIZEN: 180, RESIDENT: 220, INTERNATIONAL: 350 } },
-        'Deluxe Villa': { High: { CITIZEN: 400, RESIDENT: 500, INTERNATIONAL: 700 }, Low: { CITIZEN: 300, RESIDENT: 380, INTERNATIONAL: 550 } }
-      },
-      room_images: {},
-      lodge_environment: { description: 'Immerse yourself in the tranquility of the surrounding landscape and untamed wildlife.' }
-    };
-  }
+  const currentHotel = hotel || {
+    name: slug ? slug.replace(/-/g, ' ').toUpperCase() : 'Luxury Sanctuary',
+    location: 'Tanzania Safari Circuit',
+    image: 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80',
+    video_url: '',
+    room_categories: ['Standard Suite', 'Deluxe Villa'],
+    room_prices: {
+      'Standard Suite': { High: { CITIZEN: 250, RESIDENT: 300, INTERNATIONAL: 450 }, Low: { CITIZEN: 180, RESIDENT: 220, INTERNATIONAL: 350 } },
+      'Deluxe Villa': { High: { CITIZEN: 400, RESIDENT: 500, INTERNATIONAL: 700 }, Low: { CITIZEN: 300, RESIDENT: 380, INTERNATIONAL: 550 } }
+    },
+    room_images: {},
+    lodge_environment: { description: 'Immerse yourself in the tranquility of the surrounding landscape and untamed wildlife.' }
+  };
 
   const safeParse = (val: any) => {
     try { 
@@ -70,23 +75,32 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
     } catch { return {}; }
   };
 
-  const prices = safeParse(hotel.room_prices);
-  const roomImages = safeParse(hotel.room_images);
-  const envData = safeParse(hotel.lodge_environment);
-  const roomCategories = Array.isArray(hotel.room_categories) ? hotel.room_categories : Object.keys(prices);
+  const prices = safeParse(currentHotel.room_prices);
+  const roomImages = safeParse(currentHotel.room_images);
+  const envData = safeParse(currentHotel.lodge_environment);
+  const roomCategories = Array.isArray(currentHotel.room_categories) ? currentHotel.room_categories : Object.keys(prices);
 
   // Automatically determine season based on current date
   const activeSeason = getCurrentSeason();
   const activeSeasonKey = activeSeason === 'high' ? 'High' : 'Low';
 
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-stone-50 font-serif gap-4">
+        <div className="w-12 h-12 border-4 border-amber-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-stone-400 tracking-widest uppercase text-sm">Curating your vision...</p>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-stone-50">
       {/* Hero Section */}
       <section className="relative h-[65vh] flex items-end">
-        {typeof hotel.image === 'string' && hotel.image.trim().length > 5 && (
+        {typeof currentHotel.image === 'string' && currentHotel.image.trim().length > 5 && (
           <Image 
-            src={hotel.image} 
-            alt={hotel.name ?? "Luxury Lodge"} 
+            src={currentHotel.image} 
+            alt={currentHotel.name ?? "Luxury Lodge"} 
             fill 
             className="object-cover" 
             priority 
@@ -98,10 +112,25 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
           <div className="flex items-center gap-2 text-amber-400 font-bold uppercase tracking-[0.2em] text-xs">
             <Globe size={14} /> Featured Itinerary Sanctuary
           </div>
-          <h1 className="text-4xl md:text-6xl font-serif tracking-tight">{hotel.name}</h1>
-          <p className="flex items-center gap-2 text-stone-200 text-base font-medium">
-            <MapPin size={18} className="text-amber-400" /> {hotel.location ?? "Tanzania Safari Circuit"}
-          </p>
+          <h1 className="text-4xl md:text-6xl font-serif tracking-tight">{currentHotel.name}</h1>
+          
+          <div className="flex flex-wrap items-center gap-6 pt-1">
+            <p className="flex items-center gap-2 text-stone-200 text-base font-medium">
+              <MapPin size={18} className="text-amber-400" /> {currentHotel.location ?? "Tanzania Safari Circuit"}
+            </p>
+
+            {/* Watch the Vision Button */}
+            {currentHotel.video_url && (
+              <button 
+                onClick={() => setIsVideoOpen(true)}
+                className="group flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-black rounded-full transition-all duration-300 font-bold text-sm shadow-lg"
+              >
+                <Play size={16} className="fill-current group-hover:scale-110 transition-transform" />
+                Watch the Vision
+              </button>
+            )}
+          </div>
+
           <div className="pt-2 flex items-center gap-2 text-stone-300">
             <ShieldCheck size={18} className="text-emerald-400" />
             <span className="text-xs font-semibold tracking-wider uppercase">Verified Luxury Partner Property</span>
@@ -144,9 +173,9 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
 
                 <div className="flex flex-wrap gap-4 pt-2">
                   <BookingWrapper 
-                    hotelName={hotel.name ?? ""} 
+                    hotelName={currentHotel.name ?? ""} 
                     category={cat} 
-                    hotel={hotel}
+                    hotel={currentHotel}
                     defaultTierId="CITIZEN" 
                   />
                   <Button variant="outline" size="lg" className="rounded-xl border-stone-300 font-semibold text-stone-700 hover:bg-stone-100" asChild>
@@ -184,6 +213,14 @@ export default async function HotelSlugPage({ params }: { params: Params }) {
         </div>
       </section>
       
+      {/* Video Modal Component */}
+      <VideoModal
+        isOpen={isVideoOpen}
+        onClose={() => setIsVideoOpen(false)}
+        videoUrl={currentHotel.video_url || ""}
+        title={`${currentHotel.name || "Escape"} - Watch the Vision`}
+      />
+
       <WhatsAppFloat />
     </main>
   );
@@ -201,7 +238,6 @@ function renderActiveSeasonPrice(priceData: unknown, targetSeason: string): Reac
       const entries = Object.entries(priceData);
       if (entries.length === 0) return <span className="text-stone-400 italic text-sm">Price on request</span>;
 
-      // Find matching season safely
       const matchingEntry = entries.find(([key]) => key && typeof key === 'string' && key.toLowerCase().includes(targetSeason.toLowerCase())) || entries[0];
       if (!matchingEntry) return <span className="text-stone-400 italic text-sm">Price on request</span>;
 

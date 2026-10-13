@@ -94,7 +94,10 @@ export default function HellensLodgePage() {
                 <MapPin size={20} className="text-amber-500" /> {lodge.location}
               </span>
               {lodge.video_url && (
-                <button onClick={() => setIsVideoOpen(true)} className="group flex items-center gap-3 px-8 py-4 bg-white hover:bg-amber-500 text-slate-900 rounded-full transition-all duration-500 font-bold shadow-xl">
+                <button 
+                  onClick={() => setIsVideoOpen(true)} 
+                  className="group flex items-center gap-3 px-8 py-4 bg-amber-500 hover:bg-amber-600 text-black rounded-full transition-all duration-300 font-bold shadow-xl"
+                >
                   <Play size={18} className="fill-current group-hover:scale-110 transition-transform" /> Watch the Vision
                 </button>
               )}
@@ -189,7 +192,12 @@ export default function HellensLodgePage() {
         setTier={setActiveTier}
         initialCategory={selectedRoom}
       />
-      <VideoModal isOpen={isVideoOpen} onClose={() => setIsVideoOpen(false)} videoUrl={lodge.video_url || ""} />
+      <VideoModal 
+        isOpen={isVideoOpen} 
+        onClose={() => setIsVideoOpen(false)} 
+        videoUrl={lodge.video_url || "https://www.youtube.com/embed//eG-TMob7Dtk"} 
+        title={`${lodge.name || "Hellen's Lodge"} - Watch the Vision`}
+      />
     </div>
   );
 }

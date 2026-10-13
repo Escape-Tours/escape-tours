@@ -16,15 +16,18 @@ export interface ItineraryItem {
   readonly id: string;
   readonly originalId: string;
   readonly name: string;
-  readonly type: 'parks' | 'lodges' | 'transfers' | 'treks' | 'activities' | 'car';
-  readonly basePrice: TariffMap | number;
+  readonly type?: string;
+  readonly basePrice?: TariffMap | number;
   readonly base_price?: TariffMap | number;
   readonly price: number;
+  readonly cost?: number;
   readonly selectedRoomType?: string;
   readonly dayId?: number;
   readonly timeSlot?: SlotType;
+  readonly slot?: SlotType;
   readonly quantity?: number;
   readonly slots?: number;
+  readonly isAfterHours?: boolean;
   readonly isDeduplicated?: boolean;
 }
 
@@ -32,6 +35,7 @@ export interface ItineraryState {
   readonly version: number;
   readonly items: readonly ItineraryItem[];
   readonly cartItems: readonly ItineraryItem[];
+  readonly afterHoursItems: readonly ItineraryItem[];
   readonly tier: ResidencyTier;
   readonly totalDays: number;
   readonly adults: number;
@@ -41,8 +45,10 @@ export interface ItineraryState {
   
   setTier: (tier: ResidencyTier) => void;
   setGuests: (adults: number, children: number) => void;
-  addItem: (item: Omit<ItineraryItem, 'id' | 'price'> & { id?: string; price?: number }, dayId: number, timeSlot: SlotType) => void;
+  addItem: (item: Omit<ItineraryItem, 'id' | 'price'> & { id?: string; price?: number }, dayId?: number, timeSlot?: SlotType) => void;
+  addAfterHoursItem: (item: Omit<ItineraryItem, 'id' | 'price'> & { id?: string; price?: number }, dayId?: number) => void;
   removeItem: (id: string) => void;
+  removeAfterHoursItem: (id: string) => void;
   updateItemSlot: (itemId: string, dayId: number, timeSlot: SlotType) => void;
   updateRoomType: (itemId: string, roomType: string) => void;
   recalculatePrices: () => void;
@@ -57,18 +63,20 @@ export interface ItineraryState {
   buildFromCart: (targetDayId?: number, targetSlot?: SlotType) => void;
   
   getSlotItems: (dayId: number, timeSlot: SlotType) => ItineraryItem[];
-  getCostBreakdown: () => { parkFees: number; accommodation: number; transport: number; vat: number; agencyFee: number; grandTotal: number; subtotal: number; notifications: string[] };
+  getCostBreakdown: () => { parkFees: number; accommodation: number; transport: number; afterHours: number; vat: number; agencyFee: number; grandTotal: number; subtotal: number; notifications: string[] };
   reset: () => void;
 }
 
-const CURRENT_STORE_VERSION = 33;
-const DEFAULT_SAFARI_CAR_PRICE = 200; // Standard daily safari vehicle cost
+const CURRENT_STORE_VERSION = 71;
+const DEFAULT_SAFARI_CAR_PRICE = 350;
 
 const resolvePrice = (item: any, tier: ResidencyTier, adults: number = 1, children: number = 0): number => {
-  let unitPrice = 0;
-  const rawPriceSource = item?.basePrice ?? item?.base_price ?? item?.price;
+  if (!item) return 0;
+  
+  const rawPriceSource = item?.basePrice ?? item?.base_price ?? item?.price ?? item?.cost;
   const upperTier = String(tier || 'INTERNATIONAL').toUpperCase() as ResidencyTier;
 
+  let unitPrice = 0;
   const translated = getStandardizedPrice(rawPriceSource, upperTier, item?.selectedRoomType);
   if (typeof translated === 'number' && !isNaN(translated) && translated > 0) {
     unitPrice = translated;
@@ -93,23 +101,18 @@ const resolvePrice = (item: any, tier: ResidencyTier, adults: number = 1, childr
     unitPrice = rawPriceSource;
   } else if (typeof item?.price === 'number' && item.price > 0) {
     unitPrice = item.price;
+  } else if (typeof item?.cost === 'number' && item.cost > 0) {
+    unitPrice = item.cost;
   }
 
   if (unitPrice <= 0 || isNaN(unitPrice)) {
-    if (upperTier === 'CITIZEN') unitPrice = 5;
-    else if (upperTier === 'RESIDENT') unitPrice = 15;
-    else unitPrice = 30;
+    const typeStr = String(item?.type || '').toLowerCase();
+    if (typeStr.includes('lodge')) unitPrice = 150;
+    else if (typeStr.includes('park')) unitPrice = upperTier === 'CITIZEN' ? 5 : upperTier === 'RESIDENT' ? 15 : 30;
+    else unitPrice = Number(item?.price || item?.cost || 50);
   }
 
-  const effectiveGuests = (item?.type === 'parks') 
-    ? (Math.max(1, adults) + (Math.max(0, children) * 0.5))
-    : (item?.type === 'lodges' || item?.type === 'activities' || item?.type === 'treks')
-      ? (Math.max(1, adults) + (Math.max(0, children) * 0.5))
-      : 1;
-
-  const quantityMultiplier = Number(item?.quantity ?? item?.slots ?? 1);
-
-  return Math.round(unitPrice * effectiveGuests * quantityMultiplier);
+  return Math.round(unitPrice);
 };
 
 export const useItineraryStore = create<ItineraryState>()(
@@ -118,6 +121,7 @@ export const useItineraryStore = create<ItineraryState>()(
       version: CURRENT_STORE_VERSION,
       items: [],
       cartItems: [],
+      afterHoursItems: [],
       tier: RESIDENCY_TIER.INTERNATIONAL,
       totalDays: 5,
       adults: 1, 
@@ -137,14 +141,45 @@ export const useItineraryStore = create<ItineraryState>()(
         get().recalculatePrices();
       },
 
-      recalculatePrices: () => set((state) => ({
-        items: (state.items || []).map(i => ({
-          ...i,
-          price: resolvePrice(i, state.tier, state.adults, state.children)
-        }))
-      })),
+      recalculatePrices: () => set((state) => {
+        const maxD = state.totalDays || 5;
+        const validItems = (state.items || []).filter(i => i && i.id && (i.dayId ?? 1) <= maxD);
+        const validAfterHours = (state.afterHoursItems || []).filter(i => i && i.id && (i.dayId ?? 1) <= maxD);
+        return {
+          items: validItems.map(i => ({
+            ...i,
+            price: resolvePrice(i, state.tier, state.adults, state.children)
+          })),
+          afterHoursItems: validAfterHours.map(i => ({
+            ...i,
+            price: resolvePrice(i, state.tier, state.adults, state.children)
+          }))
+        };
+      }),
 
-      addItem: (item, dayId, timeSlot) => set((state) => {
+      addItem: (item, dayId = 1, timeSlot = 'MORNING') => set((state) => {
+        if (!item || (!item.id && !item.originalId && !item.name)) return {};
+        const typeStr = String(item?.type || '').toLowerCase();
+        const isAfterHours = item?.isAfterHours || typeStr.includes('after_hours') || typeStr.includes('bush_party') || typeStr.includes('nightlife');
+
+        if (isAfterHours) {
+          const resolvedPrice = resolvePrice(item, state.tier, state.adults, state.children);
+          const uniqueId = `afterhours-${dayId}-${item?.originalId || item?.id || Date.now()}`;
+          const newItem: ItineraryItem = {
+            ...item,
+            id: uniqueId,
+            originalId: item?.originalId || item?.id || '',
+            dayId,
+            isAfterHours: true,
+            price: resolvedPrice > 0 ? resolvedPrice : 50,
+            basePrice: item?.basePrice ?? item?.base_price ?? item?.price ?? resolvedPrice,
+          };
+          const filteredAfterHours = (state.afterHoursItems || []).filter(
+            (ah) => ah && ah.id && ah.originalId !== newItem.originalId
+          );
+          return { afterHoursItems: [...filteredAfterHours, newItem] };
+        }
+
         const resolvedPrice = resolvePrice(item, state.tier, state.adults, state.children);
         const uniqueId = `item-${dayId}-${timeSlot}-${item?.originalId || item?.id || Date.now()}`;
         
@@ -154,28 +189,61 @@ export const useItineraryStore = create<ItineraryState>()(
           originalId: item?.originalId || item?.id || '',
           dayId,
           timeSlot,
-          price: resolvedPrice,
+          slot: timeSlot,
+          price: resolvedPrice > 0 ? resolvedPrice : 50,
           basePrice: item?.basePrice ?? item?.base_price ?? item?.price ?? resolvedPrice,
         };
 
         const filteredItems = (state.items || []).filter(
-          (i) => !(i.dayId === dayId && i.timeSlot === timeSlot)
+          (i) => i && i.id && !(i.dayId === dayId && (i.timeSlot === timeSlot || i.slot === timeSlot) && i.originalId === newItem.originalId)
         );
 
         return { items: [...filteredItems, newItem] };
       }),
 
+      addAfterHoursItem: (item, dayId = 1) => set((state) => {
+        if (!item || (!item.id && !item.originalId && !item.name)) return {};
+        const resolvedPrice = resolvePrice(item, state.tier, state.adults, state.children);
+        const uniqueId = `afterhours-${dayId}-${item?.originalId || item?.id || Date.now()}`;
+        const newItem: ItineraryItem = {
+          ...item,
+          id: uniqueId,
+          originalId: item?.originalId || item?.id || '',
+          dayId,
+          isAfterHours: true,
+          price: resolvedPrice > 0 ? resolvedPrice : 50,
+          basePrice: item?.basePrice ?? item?.base_price ?? item?.price ?? resolvedPrice,
+        };
+        const filteredAfterHours = (state.afterHoursItems || []).filter(
+          (ah) => ah && ah.id && ah.originalId !== newItem.originalId
+        );
+        return { afterHoursItems: [...filteredAfterHours, newItem] };
+      }),
+
       removeItem: (id) => set((state) => ({
-        items: (state.items || []).filter((i) => i.id !== id && i.originalId !== id)
+        items: (state.items || []).filter((i) => i && i.id !== id && i.originalId !== id),
+        afterHoursItems: (state.afterHoursItems || []).filter((i) => i && i.id !== id && i.originalId !== id)
+      })),
+
+      removeAfterHoursItem: (id) => set((state) => ({
+        afterHoursItems: (state.afterHoursItems || []).filter((i) => i && i.id !== id && i.originalId !== id)
       })),
 
       updateItemSlot: (itemId, dayId, timeSlot) => set((state) => ({
-        items: (state.items || []).map((i) => (i.id === itemId || i.originalId === itemId) ? { ...i, dayId, timeSlot } : i)
+        items: (state.items || []).map((i) => (i && (i.id === itemId || i.originalId === itemId)) ? { ...i, dayId, timeSlot, slot: timeSlot } : i)
       })),
 
       updateRoomType: (itemId, selectedRoomType) => set((state) => ({
         items: (state.items || []).map((i) => {
-          if (i.id !== itemId && i.originalId !== itemId) return i;
+          if (!i || (i.id !== itemId && i.originalId !== itemId)) return i;
+          const updatedItem = { ...i, selectedRoomType };
+          return {
+            ...updatedItem,
+            price: resolvePrice(updatedItem, state.tier, state.adults, state.children)
+          };
+        }),
+        afterHoursItems: (state.afterHoursItems || []).map((i) => {
+          if (!i || (i.id !== itemId && i.originalId !== itemId)) return i;
           const updatedItem = { ...i, selectedRoomType };
           return {
             ...updatedItem,
@@ -187,17 +255,28 @@ export const useItineraryStore = create<ItineraryState>()(
       addDay: () => set((state) => ({ totalDays: state.totalDays + 1 })),
       removeDay: () => set((state) => {
         const newTotalDays = Math.max(1, state.totalDays - 1);
-        const cleanedItems = (state.items || []).filter(i => (i.dayId ?? 1) <= newTotalDays);
-        return { totalDays: newTotalDays, items: cleanedItems };
+        const cleanedItems = (state.items || []).filter(i => i && i.id && (i.dayId ?? 1) <= newTotalDays);
+        const cleanedAfterHours = (state.afterHoursItems || []).filter(i => i && i.id && (i.dayId ?? 1) <= newTotalDays);
+        return { totalDays: newTotalDays, items: cleanedItems, afterHoursItems: cleanedAfterHours };
       }),
 
       rejectCarForDay: (dayId) => set((state) => ({
         rejectedCarDays: state.rejectedCarDays.includes(dayId) ? state.rejectedCarDays : [...state.rejectedCarDays, dayId]
       })),
 
-      clearItinerary: () => set({ items: [], notifications: [], rejectedCarDays: [] }),
+      clearItinerary: () => {
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('itinerary-storage');
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        set({ items: [], cartItems: [], afterHoursItems: [], notifications: [], rejectedCarDays: [] });
+      },
 
       addCartItem: (item) => set((state) => {
+        if (!item || (!item.id && !item.originalId && !item.name)) return {};
         const resolvedPrice = resolvePrice(item, state.tier, state.adults, state.children);
         const cartId = `cart-${item?.originalId || item?.id || Date.now()}`;
         const newCartItem: ItineraryItem = {
@@ -211,16 +290,17 @@ export const useItineraryStore = create<ItineraryState>()(
       }),
 
       removeCartItem: (id) => set((state) => ({
-        cartItems: (state.cartItems || []).filter(i => i.id !== id && i.originalId !== id)
+        cartItems: (state.cartItems || []).filter(i => i && i.id !== id && i.originalId !== id)
       })),
 
       clearCart: () => set({ cartItems: [] }),
 
       buildFromCart: (targetDayId = 1, targetSlot = 'MORNING') => set((state) => {
-        const cartItems = state.cartItems || [];
+        const cartItems = (state.cartItems || []).filter(i => i && i.id);
         if (cartItems.length === 0) return {};
 
-        const newItems = [...(state.items || [])];
+        const newItems = [...(state.items || []).filter(i => i && i.id)];
+        const newAfterHours = [...(state.afterHoursItems || []).filter(ah => ah && ah.id)];
         let currentDay = targetDayId;
         let currentSlot: SlotType = targetSlot;
         let maxDay = state.totalDays;
@@ -229,18 +309,29 @@ export const useItineraryStore = create<ItineraryState>()(
 
         cartItems.forEach((cartItem) => {
           const resolvedPrice = resolvePrice(cartItem, state.tier, state.adults, state.children);
-          const uniqueId = `item-${currentDay}-${currentSlot}-${cartItem.originalId || cartItem.id || Date.now()}`;
-          
-          const filteredIndex = newItems.findIndex(i => i.dayId === currentDay && i.timeSlot === currentSlot);
-          if (filteredIndex !== -1) {
-            newItems.splice(filteredIndex, 1);
+          const typeStr = String(cartItem?.type || '').toLowerCase();
+          const isAfterHours = cartItem?.isAfterHours || typeStr.includes('after_hours') || typeStr.includes('bush_party');
+
+          if (isAfterHours) {
+            newAfterHours.push({
+              ...cartItem,
+              id: `afterhours-${currentDay}-${cartItem.originalId || cartItem.id || Date.now()}`,
+              dayId: currentDay,
+              isAfterHours: true,
+              price: resolvedPrice,
+              basePrice: cartItem?.basePrice ?? cartItem?.base_price ?? cartItem?.price ?? resolvedPrice,
+            });
+            return;
           }
+
+          const uniqueId = `item-${currentDay}-${currentSlot}-${cartItem.originalId || cartItem.id || Date.now()}`;
 
           newItems.push({
             ...cartItem,
             id: uniqueId,
             dayId: currentDay,
             timeSlot: currentSlot,
+            slot: currentSlot,
             price: resolvedPrice,
             basePrice: cartItem?.basePrice ?? cartItem?.base_price ?? cartItem?.price ?? resolvedPrice,
           });
@@ -259,131 +350,179 @@ export const useItineraryStore = create<ItineraryState>()(
 
         return {
           items: newItems,
+          afterHoursItems: newAfterHours,
           cartItems: [],
           totalDays: Math.max(state.totalDays, maxDay)
         };
       }),
 
       getSlotItems: (dayId, timeSlot) => 
-        (get().items || []).filter(i => i.dayId === dayId && i.timeSlot === timeSlot),
+        (get().items || []).filter(i => i && i.id && ((i.dayId ?? 1) === dayId) && (i.timeSlot === timeSlot || i.slot === timeSlot)),
 
       getCostBreakdown: () => {
         const state = get();
-        const items = state.items || [];
-        const notifications: string[] = [];
-
-        // Group items by day
-        const daysMap = new Map<number, ItineraryItem[]>();
-        items.forEach(i => {
-          const dId = i.dayId ?? 1;
-          if (!daysMap.has(dId)) daysMap.set(dId, []);
-          daysMap.get(dId)!.push(i);
+        const maxD = state.totalDays || 5;
+        const items = (state.items || []).filter(i => i && i.id && typeof i === 'object' && (i.dayId ?? 1) <= maxD);
+        
+        const afterHoursMap = new Map<string, ItineraryItem>();
+        (state.afterHoursItems || []).filter(ah => ah && ah.id && (ah.dayId ?? 1) <= maxD).forEach(ah => {
+          afterHoursMap.set(ah.id || ah.originalId, ah);
         });
+
+        if (items.length === 0 && afterHoursMap.size === 0) {
+          return { parkFees: 0, accommodation: 0, transport: 0, afterHours: 0, vat: 0, agencyFee: 0, subtotal: 0, grandTotal: 0, notifications: [] };
+        }
 
         let accommodation = 0;
         let parkFees = 0;
         let transport = 0;
-        let otherItemsTotal = 0;
+        let afterHoursTotal = 0;
+        let explicitVehicleAdded = false;
 
         const defaultParkFee = state.tier === 'CITIZEN' ? 5 : state.tier === 'RESIDENT' ? 15 : 30;
+        
+        // Strict Hotel Deduplication per Day to prevent double-charging if a hotel item is selected twice on the same day
+        const processedLodges = new Set<string>();
 
-        daysMap.forEach((dayItems, dayId) => {
-          // 1. Same-day lodge deduplication per day
-          const lodgeItems = dayItems.filter(i => i?.type === 'lodges');
-          if (lodgeItems.length > 0) {
-            const uniqueLodgeIds = new Set(lodgeItems.map(l => l.originalId || l.id || l.name));
-            if (uniqueLodgeIds.size === 1) {
-              // Deduplicate: charge full price for only the first occurrence of the lodge on this day
-              accommodation += Number(lodgeItems[0]?.price) || 0;
-              notifications.push(`Day ${dayId}: Same-day lodging coverage detected (${lodgeItems[0].name}). Duplicate slot zeroed out.`);
-            } else {
-              // Different hotels/transition on same day
-              lodgeItems.forEach(l => {
-                accommodation += Number(l?.price) || 0;
-              });
+        items.forEach(i => {
+          const itemType = String(i?.type || '').toLowerCase();
+          const itemPrice = Number(i?.price || 0);
+          const dayId = i?.dayId ?? 1;
+          const slot = String(i?.timeSlot || i?.slot || '').toUpperCase();
+
+          if (i?.isAfterHours || itemType.includes('after_hours') || slot === 'EVENING' && (itemType.includes('spa') || itemType.includes('party') || itemType.includes('dinner') || itemType.includes('night') || itemType.includes('after'))) {
+            afterHoursTotal += itemPrice;
+            return;
+          }
+
+          if (itemType.includes('lodge') || itemType === 'lodges' || itemType.includes('hotel') || itemType.includes('accommodation')) {
+            const lodgeKey = `${dayId}-${i.originalId || i.id}`;
+            if (!processedLodges.has(lodgeKey)) {
+              processedLodges.add(lodgeKey);
+              accommodation += itemPrice;
             }
+          } else if (itemType.includes('park') || itemType === 'parks') {
+            parkFees += itemPrice > 0 ? itemPrice : defaultParkFee;
+          } else if (itemType === 'transfers' || itemType === 'car' || itemType === 'transport' || itemType === 'safari_car') {
+            transport += itemPrice > 0 ? itemPrice : DEFAULT_SAFARI_CAR_PRICE;
+            explicitVehicleAdded = true;
+          } else {
+            accommodation += itemPrice;
           }
-
-          // 2. Parks calculation
-          const dayParks = dayItems.filter(i => i?.type === 'parks');
-          const hasPark = dayParks.length > 0;
-          const hasLodge = lodgeItems.length > 0;
-
-          dayParks.forEach(p => {
-            parkFees += Number(p?.price) > 0 ? Number(p.price) : defaultParkFee;
-          });
-
-          // 3. Explicit transport / car check
-          const hasCar = dayItems.some(i => i?.type === 'transfers' || i?.type === 'car');
-          if (hasCar) {
-            dayItems.filter(i => i?.type === 'transfers' || i?.type === 'car').forEach(c => {
-              transport += Number(c?.price) || 0;
-            });
-          } else if (hasLodge && hasPark && !state.rejectedCarDays.includes(dayId)) {
-            // Chrono-flow rule: Hotel + Park selected without car -> Auto-add safari car & notify
-            transport += DEFAULT_SAFARI_CAR_PRICE;
-            notifications.push(`Chrono-Flow Notice: Day ${dayId} contains a hotel and a park. A safari vehicle ($${DEFAULT_SAFARI_CAR_PRICE}) has been included for logistics.`);
-          }
-
-          // 4. Other item types (activities, treks)
-          dayItems.filter(i => !['lodges', 'parks', 'transfers', 'car'].includes(i?.type)).forEach(o => {
-            otherItemsTotal += Number(o?.price) || 0;
-          });
         });
 
-        const subtotal = accommodation + parkFees + transport + otherItemsTotal;
+        afterHoursMap.forEach(ah => {
+          const ahPrice = Number(ah?.price || 50);
+          afterHoursTotal += ahPrice;
+        });
+
+        const activeDays = new Set<number>();
+        items.forEach(i => activeDays.add(i.dayId ?? 1));
+        afterHoursMap.forEach(ah => activeDays.add(ah.dayId ?? 1));
+
+        if (!explicitVehicleAdded) {
+          activeDays.forEach(dayId => {
+            const dayItems = items.filter(i => (i.dayId ?? 1) === dayId);
+            const hasParkActivity = dayItems.some(i => {
+              const t = String(i?.type || '').toLowerCase();
+              const name = String(i?.name || '').toLowerCase();
+              return t.includes('park') || t === 'parks' || t.includes('safari') || name.includes('serengeti') || name.includes('ngorongoro') || name.includes('tarangire') || name.includes('manyara') || name.includes('mikumi');
+            });
+
+            if (hasParkActivity && !state.rejectedCarDays.includes(dayId)) {
+              transport += DEFAULT_SAFARI_CAR_PRICE;
+            }
+          });
+        }
+
+        const subtotal = accommodation + parkFees + transport + afterHoursTotal;
         const vat = Math.round(subtotal * 0.18);
-        const agencyFee = Math.round(subtotal * 0.20);
+        const agencyFeePercentage = transport > 0 ? 0.25 : 0.20;
+        const agencyFee = Math.round(subtotal * agencyFeePercentage);
         const grandTotal = subtotal + vat + agencyFee;
 
-        return { parkFees, accommodation, transport, vat, agencyFee, subtotal, grandTotal, notifications };
+        return { parkFees, accommodation, transport, afterHours: afterHoursTotal, vat, agencyFee, subtotal, grandTotal, notifications: [] };
       },
 
-      reset: () => set({ items: [], cartItems: [], tier: RESIDENCY_TIER.INTERNATIONAL, totalDays: 5, adults: 1, children: 0, notifications: [], rejectedCarDays: [] })
+      reset: () => set({ items: [], cartItems: [], afterHoursItems: [], tier: RESIDENCY_TIER.INTERNATIONAL, totalDays: 5, adults: 1, children: 0, notifications: [], rejectedCarDays: [] })
     }),
     { 
       name: 'itinerary-storage',
-      storage: createJSONStorage(() => localStorage),
-      version: CURRENT_STORE_VERSION,
-      skipHydration: true,
-      merge: (persistedState: any, currentState) => {
-        if (!persistedState || persistedState.version !== CURRENT_STORE_VERSION) {
-          return currentState;
+      storage: createJSONStorage(() => ({
+        getItem: (name) => {
+          try {
+            if (typeof window === 'undefined') return null;
+            const str = localStorage.getItem(name);
+            if (!str) return null;
+            const parsed = JSON.parse(str);
+            if (!parsed || parsed.version !== CURRENT_STORE_VERSION) {
+              localStorage.removeItem(name);
+              return null;
+            }
+            return str;
+          } catch (e) {
+            localStorage.removeItem(name);
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            if (typeof window === 'undefined') {
+              localStorage.setItem(name, value);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        },
+        removeItem: (name) => {
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem(name);
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
-
-        const totalDays = persistedState.totalDays || currentState.totalDays;
-        const currentTier = persistedState.tier || currentState.tier || RESIDENCY_TIER.INTERNATIONAL;
-        const currentAdults = persistedState.adults || currentState.adults || 1;
-        const currentChildren = persistedState.children || currentState.children || 0;
-
-        const validItems = Array.isArray(persistedState.items)
-          ? persistedState.items.map((i: any) => {
-              if (!i || typeof i.dayId !== 'number' || i.dayId > totalDays || !i.timeSlot) return null;
-              const recalculatedPrice = resolvePrice(i, currentTier, currentAdults, currentChildren);
-              return {
-                ...i,
-                price: recalculatedPrice >= 0 ? recalculatedPrice : i.price
-              };
-            }).filter(Boolean)
-          : [];
-
+      })),
+      version: CURRENT_STORE_VERSION,
+      migrate: (persistedState: any) => {
+        return {
+          ...persistedState,
+          items: [],
+          afterHoursItems: [],
+          cartItems: []
+        };
+      },
+      skipHydration: false,
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.recalculatePrices();
+        }
+      },
+      merge: (persistedState: any, currentState) => {
+        if (!persistedState) return currentState;
         return {
           ...currentState,
           ...persistedState,
-          adults: Math.max(1, currentAdults),
-          items: validItems,
+          items: [],
+          afterHoursItems: [],
+          cartItems: []
         };
       },
-      partialize: (state) => ({ 
-        version: state.version,
-        items: state.items || [], 
-        cartItems: state.cartItems || [],
-        tier: state.tier, 
-        totalDays: state.totalDays, 
-        adults: state.adults, 
-        children: state.children,
-        rejectedCarDays: state.rejectedCarDays
-      })
+      partialize: (state: ItineraryState) => {
+        const maxD = state.totalDays || 5;
+        return { 
+          version: state.version,
+          items: (state.items || []).filter(i => i && i.id && (i.dayId ?? 1) <= maxD), 
+          cartItems: (state.cartItems || []).filter(i => i && i.id),
+          afterHoursItems: (state.afterHoursItems || []).filter(i => i && i.id && (i.dayId ?? 1) <= maxD),
+          tier: state.tier, 
+          totalDays: state.totalDays, 
+          adults: state.adults, 
+          children: state.children,
+          rejectedCarDays: state.rejectedCarDays
+        };
+      }
     }
   )
 );

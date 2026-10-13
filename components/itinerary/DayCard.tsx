@@ -1,13 +1,15 @@
 // components/itinerary/DayCard.tsx
 'use client';
 
-import { useTransition, useMemo, memo } from 'react';
+import { useTransition, useMemo, memo, useState } from 'react';
 import { updateItineraryItemDay } from '@/actions/itineraryActions';
 import { PricingEngine } from "@/lib/utils/PricingEngine";
 import { ResidencyTier } from "@/lib/types/TariffParkFees";
 import { Sun, Coffee, Moon, Trash2, X, Plus, MapPin, Sparkles, Compass } from 'lucide-react';
 import { Day, ItineraryItem } from '@/lib/types/itinerary-types';
 import { useItineraryStore } from '@/store/useItineraryStore';
+import AfterHoursPickerModal from './AfterHoursPickerModal';
+import { AfterHoursVenue } from '@/lib/constants/index';
 
 interface SlotRendererProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,6 +18,10 @@ interface SlotRendererProps {
   tier: ResidencyTier;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onRemove: () => void;
+  isEvening?: boolean;
+  afterHoursVenue?: AfterHoursVenue | null;
+  onOpenAfterHoursModal?: () => void;
+  onRemoveAfterHours?: () => void;
 }
 
 interface DayCardProps {
@@ -29,7 +35,9 @@ interface DayCardProps {
   setGuests?: any;
 }
 
-const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, onRemove }: SlotRendererProps) {
+const SlotRenderer = memo(function SlotRenderer({ 
+  slot, guests, tier, onDrop, onRemove, isEvening, afterHoursVenue, onOpenAfterHoursModal, onRemoveAfterHours 
+}: SlotRendererProps) {
   const safeAdults = guests?.adults ?? 1;
   const safeChildren = guests?.children ?? 0;
 
@@ -51,7 +59,7 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
 
       if (slot.item.price !== undefined && slot.item.price > 0) {
         return {
-          total: slot.item.price * (safeAdults + (safeChildren * 0.5)),
+          total: slot.item.price,
           currency: slot.item.currency || 'USD',
           label: slot.item.name
         };
@@ -62,7 +70,7 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
       console.error("Pricing error:", e);
       if (slot.item.price !== undefined && slot.item.price > 0) {
         return {
-          total: slot.item.price * (safeAdults + (safeChildren * 0.5)),
+          total: slot.item.price,
           currency: slot.item.currency || 'USD',
           label: slot.item.name
         };
@@ -96,6 +104,21 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
 
   const config = getSlotConfig(slot.type);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractPriceNumber = (p: any): number => {
+    if (typeof p === 'number') return p;
+    if (p && typeof p === 'object') {
+      return Number(p.amount ?? p.price ?? p.total ?? 0);
+    }
+    return Number(p) || 0;
+  };
+
+  const rawAfterHoursPrice = extractPriceNumber(afterHoursVenue?.price);
+  const calculatedAfterHoursTotal = rawAfterHoursPrice > 0 ? rawAfterHoursPrice * (safeAdults + (safeChildren * 0.5)) : 0;
+
+  const itemCategoryType = String(slot.item?.type || slot.item?.category || 'Experience').toUpperCase();
+  const itemNameDisplay = fee?.label || slot.item?.name || slot.item?.title || 'Selected Experience';
+
   return (
     <div 
       onDragOver={(e) => e.preventDefault()} 
@@ -125,32 +148,36 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
           <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover/slot:text-amber-200 text-center">Drop Experience</span>
         </div>
       ) : (
-        <div className="relative z-10 bg-gradient-to-b from-slate-950/95 to-slate-900/90 p-2.5 rounded-2xl shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] border border-white/[0.08] w-full animate-in fade-in duration-500 my-auto flex flex-col gap-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-start gap-1.5 min-w-0 pr-6">
-              <div className="w-5 h-5 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0 mt-0.5">
-                <Compass size={11} className="text-amber-400" />
-              </div>
-              <p className="font-bold text-slate-100 text-[10px] leading-snug break-words tracking-wide">
-                {fee?.label || slot.item.name}
-              </p>
-            </div>
+        <div className="relative z-10 bg-gradient-to-b from-slate-950/95 to-slate-900/90 p-3 rounded-2xl shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] border border-white/[0.08] w-full animate-in fade-in duration-500 my-auto flex flex-col gap-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[8px] tracking-wider uppercase font-black px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              {itemCategoryType}
+            </span>
 
             <button 
               type="button"
               onClick={(e) => { e.stopPropagation(); onRemove(); }} 
-              className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-slate-900/90 border border-white/15 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg z-20"
+              className="p-1.5 rounded-xl bg-slate-900/90 border border-white/15 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg z-20"
               title="Remove item"
             >
               <Trash2 size={12} className="stroke-[2.2]" />
             </button>
           </div>
+
+          <div className="flex items-start gap-1.5 min-w-0 pr-1">
+            <div className="w-5 h-5 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Compass size={11} className="text-amber-400" />
+            </div>
+            <p className="font-bold text-slate-100 text-[11px] leading-snug break-words tracking-wide line-clamp-2">
+              {itemNameDisplay}
+            </p>
+          </div>
           
           <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.08]">
             <div className="flex items-center justify-between">
               <span className="text-[7px] uppercase tracking-wider font-extrabold text-slate-400">Total Investment</span>
-              <span className="text-[10px] font-black text-amber-400 tracking-wider">
-                {fee && fee.total !== undefined && fee.total > 0 ? `${fee.currency || 'USD'} ${fee.total.toLocaleString()}` : (slot.item.price ? `USD ${slot.item.price}` : "Complimentary")}
+              <span className="text-[11px] font-black text-amber-400 tracking-wider">
+                {fee && fee.total !== undefined && fee.total > 0 ? `${fee.currency || 'USD'} ${fee.total.toLocaleString()}` : (slot.item.price ? `USD ${slot.item.price.toLocaleString()}` : "Complimentary")}
               </span>
             </div>
             
@@ -169,6 +196,62 @@ const SlotRenderer = memo(function SlotRenderer({ slot, guests, tier, onDrop, on
           </div>
         </div>
       )}
+
+      {/* Embedded After Hours Sub-section inside Evening Slot */}
+      {isEvening && (
+        <div className="mt-3 pt-2.5 border-t border-white/[0.08] relative z-10 w-full">
+          {afterHoursVenue ? (
+            <div className="bg-slate-950/90 border border-amber-500/40 rounded-xl p-3 flex flex-col gap-2 text-[10px] animate-in fade-in duration-300 shadow-xl">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0 shadow-[0_0_8px_rgba(245,158,11,1)]" />
+                  <span className="text-[8px] font-black uppercase tracking-widest text-amber-300/95 truncate">
+                    {afterHoursVenue.category || 'Nightlife'} • After Dark
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onOpenAfterHoursModal?.(); }}
+                    className="text-[9px] text-amber-300 hover:text-white underline font-semibold px-1 py-0.5 cursor-pointer"
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onRemoveAfterHours?.(); }}
+                    className="p-1 rounded-lg bg-slate-900 border border-white/15 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/40 transition-all cursor-pointer z-30"
+                    title="Remove After Hours Experience"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-white font-bold text-[10px] truncate tracking-wide">
+                  {afterHoursVenue.name}
+                </p>
+                {calculatedAfterHoursTotal > 0 && (
+                  <p className="text-[9px] text-amber-400 font-extrabold mt-0.5">
+                    USD {calculatedAfterHoursTotal.toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenAfterHoursModal?.(); }}
+              className="w-full py-2 px-2.5 border border-dashed border-amber-400/30 hover:border-amber-400/60 rounded-xl text-amber-300/80 hover:text-amber-300 text-[9px] font-bold transition-all flex items-center justify-center gap-1.5 group bg-slate-950/40 hover:bg-amber-400/[0.04] shadow-inner cursor-pointer"
+            >
+              <span className="text-xs group-hover:scale-125 transition-transform duration-300">✨</span>
+              <span className="tracking-wider uppercase text-[8px]">Add After Hours / Bush Party</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -179,6 +262,7 @@ function DayCard({
   day, onMoveItem, onRemoveItem, onDeleteDay, residencyTier = 'INTERNATIONAL', guests = { adults: 1, children: 0 } 
 }: DayCardProps) {
   const [isPending, startTransition] = useTransition();
+  const [isAfterHoursModalOpen, setIsAfterHoursModalOpen] = useState(false);
   
   const safeAdults = guests?.adults ?? 1;
   const safeChildren = guests?.children ?? 0;
@@ -186,26 +270,94 @@ function DayCard({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const storeItems = useItineraryStore((state: any) => state.items);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const afterHoursItems = useItineraryStore((state: any) => state.afterHoursItems);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const addItemToStore = useItineraryStore((state: any) => state.addItem);
+
+  // Directly derive the active after-hours venue for this specific day from the store
+  const afterHoursVenue = useMemo(() => {
+    // 1. Check dedicated afterHoursItems store state
+    if (afterHoursItems && Array.isArray(afterHoursItems)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchedAh = afterHoursItems.find((i: any) => {
+        const matchesDayNum = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number);
+        const matchesDayId = String(i.dayId || '') === String(day.id);
+        return matchesDayNum || matchesDayId;
+      });
+
+      if (matchedAh) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawImg = (matchedAh as any).image || (matchedAh as any).img || '';
+        return {
+          id: matchedAh.originalId || matchedAh.id,
+          name: matchedAh.name || matchedAh.title || 'Selected Venue',
+          category: matchedAh.category || matchedAh.type || 'Nightlife',
+          price: matchedAh.basePrice || matchedAh.price || matchedAh.cost || 0,
+          perks: matchedAh.perks || [],
+          description: matchedAh.description || '',
+          image: typeof rawImg === 'string' ? rawImg : (rawImg?.url || ''),
+          location: matchedAh.location || ''
+        } as unknown as AfterHoursVenue;
+      }
+    }
+
+    // 2. Fallback check inside main items array for items tagged as isAfterHours
+    if (storeItems && Array.isArray(storeItems)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchedMainAh = storeItems.find((i: any) => {
+        if (!i.isAfterHours) return false;
+        const matchesDayNum = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number);
+        const matchesDayId = String(i.dayId || '') === String(day.id);
+        return matchesDayNum || matchesDayId;
+      });
+
+      if (matchedMainAh) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawImg = (matchedMainAh as any).image || (matchedMainAh as any).img || '';
+        return {
+          id: matchedMainAh.originalId || matchedMainAh.id,
+          name: matchedMainAh.name || matchedMainAh.title || 'Selected Venue',
+          category: matchedMainAh.category || matchedMainAh.type || 'Nightlife',
+          price: matchedMainAh.basePrice || matchedMainAh.price || matchedMainAh.cost || 0,
+          perks: matchedMainAh.perks || [],
+          description: matchedMainAh.description || '',
+          image: typeof rawImg === 'string' ? rawImg : (rawImg?.url || ''),
+          location: matchedMainAh.location || ''
+        } as unknown as AfterHoursVenue;
+      }
+    }
+
+    return null;
+  }, [afterHoursItems, storeItems, day.day_number, day.id]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const synchronizedSlots: any[] = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (day.slots || []).map((slot: any) => {
+      let activeItem = slot.item || null;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const matchedStoreItem = (storeItems || []).find((i: any) => {
-        const matchesDay = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number);
-        const matchesSlotType = String(i.timeSlot || i.slot || '').toUpperCase() === String(slot.type).toUpperCase();
-        const matchesSlotId = String(i.slotId || '') === String(slot.id);
-        return matchesDay && (matchesSlotType || matchesSlotId);
+        if (i.isAfterHours) return false;
+        const matchesDay = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number) || String(i.dayId) === String(day.id);
+        const matchesSlotId = Boolean(i.slotId && slot.id && String(i.slotId) === String(slot.id));
+        const matchesSlotType = Boolean(
+          i.slot && slot.type && 
+          String(i.slot).toUpperCase() === String(slot.type).toUpperCase() &&
+          (!i.slotId || i.slotId === slot.id)
+        );
+        
+        return matchesDay && (matchesSlotId || matchesSlotType);
       });
       
+      let finalItem = matchedStoreItem || activeItem || null;
+
       return {
         ...slot,
-        item: matchedStoreItem || slot.item || null
+        item: finalItem
       };
     });
-  }, [day.slots, day.day_number, storeItems]);
+  }, [day.slots, day.day_number, day.id, storeItems]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, slotId: string, slotType: string) => {
     e.preventDefault();
@@ -239,17 +391,20 @@ function DayCard({
       onMoveItem(day.id, slotId, droppedItem);
 
       if (typeof addItemToStore === 'function') {
-        addItemToStore({
+        const fullStoreItem = {
           ...droppedItem,
-          id: droppedItem.id,
+          id: droppedItem.id || `item-${Date.now()}`,
           originalId: droppedItem.id,
           price: calculatedPrice,
+          cost: calculatedPrice,
+          amount: calculatedPrice,
           slotId: slotId,
           slot: slotType,
           timeSlot: slotType,
           day: Number(day.day_number) || 1,
           dayId: day.id
-        });
+        } as unknown as ItineraryItem;
+        addItemToStore(fullStoreItem);
       }
       
       startTransition(() => {
@@ -269,7 +424,8 @@ function DayCard({
     const currentItems = state.items || [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatedItems = currentItems.filter((i: any) => {
-      const matchesDay = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number);
+      if (i.isAfterHours) return true;
+      const matchesDay = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number) || String(i.dayId) === String(day.id);
       const matchesSlot = String(i.slot || i.timeSlot || '').toUpperCase() === String(slotType).toUpperCase();
       const matchesSlotId = String(i.slotId || '') === String(slotId);
       
@@ -284,6 +440,8 @@ function DayCard({
 
     if (typeof state.setItems === 'function') {
       state.setItems(updatedItems);
+    } else if (typeof state.set === 'function') {
+      state.set({ items: updatedItems });
     }
 
     const itemName = item?.name || "Item";
@@ -298,6 +456,139 @@ function DayCard({
         void (updateItineraryItemDay as any)(item.id, "", slotId);
       });
     }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractPriceNumber = (p: any): number => {
+    if (typeof p === 'number') return p;
+    if (p && typeof p === 'object') {
+      return Number(p.amount ?? p.price ?? p.total ?? 0);
+    }
+    return Number(p) || 0;
+  };
+
+  const handleAttachAfterHours = (venue: AfterHoursVenue) => {
+    const baseVenuePrice = extractPriceNumber(venue.price);
+    const totalVenuePrice = baseVenuePrice > 0 ? baseVenuePrice * (safeAdults + (safeChildren * 0.5)) : 50;
+
+    const afterHoursUniqueId = `after-hours-${venue.id}-${day.day_number}`;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const state: any = useItineraryStore.getState();
+    const currentAfterHours = state.afterHoursItems || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filteredAfterHours = currentAfterHours.filter((i: any) => Number(i.day ?? i.dayId ?? 1) !== Number(day.day_number) && String(i.dayId) !== String(day.id));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const venueImg = (venue as any).image || (venue as any).img || '';
+    const exactVenueName = venue.name || 'After Hours Experience';
+
+    const afterHoursPayload = {
+      id: afterHoursUniqueId,
+      originalId: venue.id,
+      name: exactVenueName,
+      price: totalVenuePrice,
+      cost: totalVenuePrice,
+      amount: totalVenuePrice,
+      currency: 'USD',
+      slotId: `after-hours-${day.id}`,
+      slot: 'EVENING',
+      timeSlot: 'EVENING',
+      day: Number(day.day_number) || 1,
+      dayId: day.id,
+      isAfterHours: true,
+      category: venue.category || 'Nightlife',
+      basePrice: baseVenuePrice,
+      perks: venue.perks,
+      description: venue.description,
+      image: typeof venueImg === 'string' ? venueImg : (venueImg?.url || ''),
+      location: venue.location
+    };
+
+    const newAfterHoursList = [...filteredAfterHours, afterHoursPayload];
+
+    // Update Zustand afterHoursItems store state
+    if (typeof state.setAfterHoursItems === 'function') {
+      state.setAfterHoursItems(newAfterHoursList);
+    }
+
+    // CRITICAL FIX: Also push the payload directly into the main store `items` array so the global checkout pricing engine picks it up instantly
+    const currentItems = state.items || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filteredItems = currentItems.filter((i: any) => !(i.isAfterHours && (Number(i.day ?? i.dayId ?? 1) === Number(day.day_number) || String(i.dayId) === String(day.id))));
+    const newItemsList = [...filteredItems, afterHoursPayload];
+
+    if (typeof state.setItems === 'function') {
+      state.setItems(newItemsList);
+    }
+
+    // Also call addItemToStore if available
+    if (typeof addItemToStore === 'function') {
+      try {
+        addItemToStore(afterHoursPayload, Number(day.day_number) || 1, 'EVENING');
+      } catch (err) {
+        console.error("addItemToStore error:", err);
+      }
+    }
+
+    // Fallback Zustand generic setter
+    if (typeof state.set === 'function') {
+      state.set({ 
+        afterHoursItems: newAfterHoursList,
+        items: newItemsList 
+      });
+    }
+
+    const event = new CustomEvent('show-toast', { 
+      detail: { message: `Attached ${exactVenueName} to Day ${day.day_number} After Hours and added to total.` } 
+    });
+    window.dispatchEvent(event);
+  };
+
+  const handleRemoveAfterHours = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const state: any = useItineraryStore.getState();
+    
+    // 1. Clear from afterHoursItems array
+    const currentAfterHours = state.afterHoursItems || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatedAfterHours = currentAfterHours.filter((i: any) => Number(i.day ?? i.dayId ?? 1) !== Number(day.day_number) && String(i.dayId) !== String(day.id));
+    if (typeof state.setAfterHoursItems === 'function') {
+      state.setAfterHoursItems(updatedAfterHours);
+    }
+
+    // 2. Clear from main items array
+    const currentItems = state.items || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatedItems = currentItems.filter((i: any) => {
+      if (!i.isAfterHours) return true;
+      const isSameDayNum = Number(i.day ?? i.dayId ?? 1) === Number(day.day_number);
+      const isSameDayId = String(i.dayId || '') === String(day.id);
+      return !(isSameDayNum || isSameDayId);
+    });
+    if (typeof state.setItems === 'function') {
+      state.setItems(updatedItems);
+    }
+
+    if (typeof state.removeItem === 'function') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const targetAh = currentAfterHours.find((i: any) => Number(i.day ?? i.dayId ?? 1) === Number(day.day_number) || String(i.dayId) === String(day.id));
+      if (targetAh?.id) {
+        try { state.removeItem(targetAh.id); } catch { /* ignore */ }
+      }
+    }
+
+    if (typeof state.set === 'function') {
+      state.set({ 
+        afterHoursItems: updatedAfterHours,
+        items: updatedItems 
+      });
+    }
+
+    const event = new CustomEvent('show-toast', { 
+      detail: { message: `Removed After Hours experience from Day ${day.day_number} and updated total.` } 
+    });
+    window.dispatchEvent(event);
   };
 
   return (
@@ -329,17 +620,34 @@ function DayCard({
      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 relative z-10 w-full">
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        {synchronizedSlots.map((slot: any) => (
-          <SlotRenderer 
-            key={slot.id}
-            slot={slot}
-            guests={{ adults: safeAdults, children: safeChildren }}
-            tier={residencyTier}
-            onDrop={(e: React.DragEvent<HTMLDivElement>) => handleDrop(e, slot.id, slot.type)}
-            onRemove={() => handleRemove(slot.id, slot.type, slot.item ?? null)}
-          />
-        ))}
+        {synchronizedSlots.map((slot: any) => {
+          const isEveningSlot = String(slot.type || '').toUpperCase() === 'EVENING';
+          return (
+            <SlotRenderer 
+              key={slot.id}
+              slot={slot}
+              guests={{ adults: safeAdults, children: safeChildren }}
+              tier={residencyTier}
+              onDrop={(e: React.DragEvent<HTMLDivElement>) => handleDrop(e, slot.id, slot.type)}
+              onRemove={() => handleRemove(slot.id, slot.type, slot.item ?? null)}
+              isEvening={isEveningSlot}
+              afterHoursVenue={isEveningSlot ? afterHoursVenue : null}
+              onOpenAfterHoursModal={() => setIsAfterHoursModalOpen(true)}
+              onRemoveAfterHours={handleRemoveAfterHours}
+            />
+          );
+        })}
       </div>
+
+      <AfterHoursPickerModal
+        isOpen={isAfterHoursModalOpen}
+        onClose={() => setIsAfterHoursModalOpen(false)}
+        onSelect={(venue: AfterHoursVenue) => {
+          handleAttachAfterHours(venue);
+          setIsAfterHoursModalOpen(false);
+        }}
+        residencyTier={residencyTier}
+      />
 
       {isPending && (
         <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-30 transition-opacity rounded-[2.5rem]">

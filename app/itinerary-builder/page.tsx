@@ -66,18 +66,6 @@ const getParkCoordinates = (name: string): { lat: number; lng: number; region: '
   return { lat: -3.3667, lng: 36.6833, region: 'NORTHERN' };
 };
 
-const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
 export default function SafariStudio() {
   const router = useRouter();
   const printRef = useRef<HTMLDivElement>(null);
@@ -87,12 +75,17 @@ export default function SafariStudio() {
 
   const addItemToStore = useItineraryStore((state) => state.addItem);
   const removeItemFromStore = useItineraryStore((state) => state.removeItem);
+  const getCostBreakdown = useItineraryStore((state) => state.getCostBreakdown);
+  const storeTier = useItineraryStore((state) => state.tier);
+  const setStoreTier = useItineraryStore((state) => state.setTier);
+
+  const storeItems = useItineraryStore((state) => state.items);
 
   const [days, setDays] = useState<Day[]>([
     { 
-      id: crypto.randomUUID(), 
-      day_number: 1, 
-      location: 'Arrival & Welcome', 
+      id: crypto.randomUUID(),
+      day_number: 1,
+      location: 'Arrival & Welcome',
       slots: [
         { id: crypto.randomUUID(), type: 'MORNING', item: null, name: null, location: { lat: null, lng: null } },
         { id: crypto.randomUUID(), type: 'AFTERNOON', item: null, name: null, location: { lat: null, lng: null } },
@@ -101,7 +94,7 @@ export default function SafariStudio() {
     }
   ]);
   
-  const [residencyTier, setResidencyTier] = useState<ResidencyTier>('CITIZEN'); 
+  const [residencyTier, setResidencyTier] = useState<ResidencyTier>('CITIZEN');
   const [hasOwnVehicle, setHasOwnVehicle] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(true);
   const [isPortfolioOpen, setIsPortfolioOpen] = useState(true);
@@ -118,7 +111,7 @@ export default function SafariStudio() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setIsAuthenticated(false);
-        setDays([]); 
+        setDays([]);
       } else {
         setIsAuthenticated(true);
         setCurrentUser(session.user);
@@ -130,115 +123,32 @@ export default function SafariStudio() {
         
         if (profile && 'residency_tier' in profile && profile.residency_tier) {
           setResidencyTier(profile.residency_tier as ResidencyTier);
+          setStoreTier(profile.residency_tier as ResidencyTier);
         }
       }
       setSessionChecked(true);
     };
     checkAuthAndProfile();
-  }, []);
+  }, [setStoreTier]);
+
+  const handleTierChange = (newTier: ResidencyTier) => {
+    setResidencyTier(newTier);
+    setStoreTier(newTier);
+  };
 
   const allItineraryItems = useMemo(() => {
     return days.flatMap(day => day.slots.map(s => ({ ...s, dayNumber: day.day_number })).filter(s => s.item !== null)) as (Day['slots'][0] & { item: ItineraryItem; dayNumber: number })[];
   }, [days]);
 
-  // Chrono-Flow Deduplication, Per-Day Vehicle Logistics & Notification Engine
-  const { subtotalCost, deduplicationNotices, requiresSafariCar, safariCarFee } = useMemo(() => {
-    const uniqueDayItems = new Map<string, { item: ItineraryItem; dayNumber: number }>();
-    const notices: string[] = [];
-    let hasHotel = false;
-    let hasPark = false;
-    let hasExplicitSafariActivity = false;
-    let explicitTransportSelected = false;
+  const costBreakdown = useMemo(() => {
+    return getCostBreakdown();
+  }, [getCostBreakdown, storeItems, storeTier, hasOwnVehicle]);
 
-    days.forEach(day => {
-      const daySlots = day.slots.filter(s => s.item !== null);
-      const dayLodges = daySlots.filter(s => {
-        const cat = (s.item?.category || '').toUpperCase();
-        const name = (s.item?.name || '').toLowerCase();
-        return cat === 'LODGES' || name.includes('lodge') || name.includes('camp') || name.includes('hotel');
-      });
-
-      const dayParks = daySlots.filter(s => {
-        const cat = (s.item?.category || '').toUpperCase();
-        return cat === 'SAFARIS' || cat === 'PARKS' || (s.item?.name || '').toLowerCase().includes('park');
-      });
-// Check for explicit game drives or safari activities
-      const daySafaris = daySlots.filter(s => {
-        const cat = (s.item?.category || '').toUpperCase();
-        const name = (s.item?.name || '').toLowerCase();
-        return cat === 'SAFARIS' || name.includes('game drive') || name.includes('safari');
-      });
-
-      const dayTransport = daySlots.filter(s => {
-        const cat = (s.item?.category || '').toUpperCase();
-        const name = (s.item?.name || '').toLowerCase();
-        return cat === 'TRANSPORT' || name.includes('cruiser') || name.includes('4x4') || name.includes('vehicle') || name.includes('car');
-      });
-
-      if (dayLodges.length > 0) hasHotel = true;
-      if (dayParks.length > 0) hasPark = true;
-      if (daySafaris.length > 0) hasExplicitSafariActivity = true;
-      if (dayTransport.length > 0) explicitTransportSelected = true;
-
-      const lodgeCounts = new Map<string, number>();
-      dayLodges.forEach(slot => {
-        const idKey = slot.item?.id || slot.item?.name || '';
-        lodgeCounts.set(idKey, (lodgeCounts.get(idKey) || 0) + 1);
-      });
-
-      lodgeCounts.forEach((count, idKey) => {
-        if (count > 1) {
-          const sampleLodge = dayLodges.find(s => (s.item?.id || s.item?.name) === idKey)?.item;
-          const lodgeName = sampleLodge?.name || 'Selected Lodge';
-          notices.push(`Chrono-Flow Notice (Day ${day.day_number}): ${lodgeName} is booked across multiple slots. You are only charged once for this day's stay.`);
-        }
-      });
-
-      day.slots.forEach(slot => {
-        if (slot.item) {
-          const isLodge = dayLodges.includes(slot);
-          if (isLodge) {
-            const lodgeKey = `${day.day_number}-lodge-${slot.item.id || slot.item.name}`;
-            if (!uniqueDayItems.has(lodgeKey)) {
-              uniqueDayItems.set(lodgeKey, { item: slot.item, dayNumber: day.day_number });
-            }
-          } else {
-            const uniqueKey = `${day.day_number}-${slot.id}-${slot.item.id}`;
-            uniqueDayItems.set(uniqueKey, { item: slot.item, dayNumber: day.day_number });
-          }
-        }
-      });
-    });
-
-    let total = 0;
-    uniqueDayItems.forEach(({ item }) => {
-      total += getBaseRateForTier(item, residencyTier);
-    });
-
-  // Triggers if you have a hotel paired with EITHER a park OR an explicit safari/game drive activity
-    const needsVehicle = hasHotel && (hasPark || hasExplicitSafariActivity) && !explicitTransportSelected && !hasOwnVehicle;
-    // Multiplied by total days ($400 per day rate)
-    const vehicleFee = needsVehicle ? 400 * days.length : 0;
-
-    if (needsVehicle) {
-      notices.push(`Chrono-Flow Notice: Hotel and Wildlife Park detected. Automated 4x4 safari vehicle transport fee ($400/day across ${days.length} day(s)) has been included.`);
-    } else if (hasOwnVehicle && hasHotel && hasPark) {
-      notices.push(`Chrono-Flow Notice: Custom vehicle mode active. Safari vehicle fee waived.`);
-    }
-
-    return { 
-      subtotalCost: total + vehicleFee, 
-      deduplicationNotices: notices, 
-      requiresSafariCar: needsVehicle,
-      safariCarFee: vehicleFee 
-    };
-  }, [days, residencyTier, hasOwnVehicle]);
-
-  const grandTotalCost = useMemo(() => {
-    const vat = subtotalCost * 0.18;
-    const agencyFee = subtotalCost * 0.20;
-    return subtotalCost + vat + agencyFee;
-  }, [subtotalCost]);
+  const subtotalCost = costBreakdown.subtotal;
+  const grandTotalCost = costBreakdown.grandTotal;
+  const deduplicationNotices = costBreakdown.notifications;
+  const safariCarFee = costBreakdown.transport;
+  const requiresSafariCar = safariCarFee > 0;
 
   const itineraryPaceScore = useMemo(() => {
     return analyzeItineraryPace(days, allItineraryItems);
@@ -273,9 +183,9 @@ export default function SafariStudio() {
         ...d, 
         slots: d.slots.map(s => s.id === slotId ? { 
           ...s, 
-          item, 
-          name: item.name, 
-          location: { lat: item.lat, lng: item.lng } 
+          item,
+          name: item.name,
+          location: { lat: item.lat, lng: item.lng }
         } : s) 
       };
     }));
@@ -329,7 +239,7 @@ export default function SafariStudio() {
       if (d.id !== dayId) return d;
       return { 
         ...d, 
-        slots: d.slots.map(s => s.id === slotId ? { ...s, item: null, name: null, location: { lat: null, lng: null } } : s) 
+        slots: d.slots.map(s => s.id === slotId ? { ...s, item: null, name: null, location: { lat: null, lng: null } } : s)
       };
     }));
 
@@ -385,8 +295,8 @@ export default function SafariStudio() {
     if (!isAuthenticated) return;
     setDays([...days, { 
       id: crypto.randomUUID(),
-      day_number: days.length + 1, 
-      location: 'New Horizon', 
+      day_number: days.length + 1,
+      location: 'New Horizon',
       slots: [
         { id: crypto.randomUUID(), type: 'MORNING', item: null, name: null, location: { lat: null, lng: null } },
         { id: crypto.randomUUID(), type: 'AFTERNOON', item: null, name: null, location: { lat: null, lng: null } },
@@ -615,7 +525,7 @@ export default function SafariStudio() {
         </aside>
       </div>
 
-      {/* Right Explorer / Catalog Sidebar (Maximized Full Height with Safari Car Included in Subtotal) */}
+      {/* Right Explorer / Catalog Sidebar */}
       <div className="relative z-25 flex h-full items-center pointer-events-auto">
         {!isPortfolioOpen && isAuthenticated && (
           <div className="absolute right-0 z-30">
@@ -635,12 +545,11 @@ export default function SafariStudio() {
         <aside className={`relative h-full transition-all duration-500 ease-in-out w-full xl:w-[650px] ${isPortfolioOpen ? 'translate-x-0 opacity-100 flex' : 'translate-x-full opacity-0 absolute pointer-events-none'} ${mobileActiveTab === 'catalog' ? 'flex' : 'hidden xl:flex'} flex-col`}>
           <div className="h-full bg-slate-950/90 backdrop-blur-xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-3 sm:p-4 flex flex-col shadow-2xl overflow-hidden relative">
             
-            {/* Fully Expanded Inventory Screen Component Wrapper */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ItineraryCategoryExplorer
                 onAddItem={handleAddItemDirectly}
                 residencyTier={residencyTier}
-                onTierChange={setResidencyTier}
+                onTierChange={handleTierChange}
                 isOpen={isPortfolioOpen}
                 onClose={() => setIsPortfolioOpen(false)}
               />
@@ -649,7 +558,6 @@ export default function SafariStudio() {
             {/* Desktop-only Compact Footer Totals & Vehicle Toggle */}
             <div className="hidden xl:flex mt-2 pt-2 border-t border-white/15 flex-col gap-1.5 shrink-0 bg-slate-950">
               
-              {/* Own Vehicle Toggle Checkbox */}
               <div className="bg-slate-900/90 border border-white/10 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-slate-300">
                 <div className="flex items-center gap-2">
                   <Truck size={15} className="text-amber-400" />
@@ -663,7 +571,6 @@ export default function SafariStudio() {
                 />
               </div>
 
-              {/* Compact Subtotal Breakdown Bar (Includes per-day safari car fees when applicable) */}
               <div className="bg-slate-900/90 border border-white/10 rounded-xl px-3 py-1.5 flex items-center justify-between text-[11px] text-slate-300">
                 <div className="flex items-center gap-3">
                   <div>
@@ -673,12 +580,12 @@ export default function SafariStudio() {
                   <span className="text-slate-600">•</span>
                   <div>
                     <span className="text-[9px] text-slate-400 uppercase tracking-wider block">VAT (18%)</span>
-                    <span className="text-slate-300">+${(subtotalCost * 0.18).toFixed(0)}</span>
+                    <span className="text-slate-300">+${costBreakdown.vat.toFixed(0)}</span>
                   </div>
                   <span className="text-slate-600">•</span>
                   <div>
                     <span className="text-[9px] text-slate-400 uppercase tracking-wider block">Agency (20%)</span>
-                    <span className="text-slate-300">+${(subtotalCost * 0.20).toFixed(0)}</span>
+                    <span className="text-slate-300">+${costBreakdown.agencyFee.toFixed(0)}</span>
                   </div>
                 </div>
                 {requiresSafariCar && (
@@ -688,7 +595,6 @@ export default function SafariStudio() {
                 )}
               </div>
 
-              {/* Grand Total Row */}
               <div className="flex items-center justify-between bg-slate-900/90 border border-white/10 rounded-xl px-3 py-2">
                 <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">Grand Total (Inc. VAT & Fees)</span>
                 <span className="text-sm font-black text-amber-400">${grandTotalCost.toFixed(0)}</span>
@@ -764,7 +670,7 @@ export default function SafariStudio() {
                     <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
                       Chrono-Flow Logistics
                     </span>
-                    <h4 className="text-xs font-bold text-white truncate mt-1">4x4 Safari Cruiser & Driver Guide (${400} / day)</h4>
+                    <h4 className="text-xs font-bold text-white truncate mt-1">4x4 Safari Cruiser & Driver Guide</h4>
                     <p className="text-[10px] text-slate-400 truncate">Automated transit coverage across {days.length} day(s)</p>
                   </div>
                   <div className="text-right shrink-0">
@@ -795,11 +701,11 @@ export default function SafariStudio() {
                   </div>
                   <div className="flex justify-between text-xs text-slate-400">
                     <span>Tanzania VAT (18%)</span>
-                    <span>+${(subtotalCost * 0.18).toFixed(0)}</span>
+                    <span>+${costBreakdown.vat.toFixed(0)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-slate-400">
                     <span>Agency Service & Coordination Fee (20%)</span>
-                    <span>+${(subtotalCost * 0.20).toFixed(0)}</span>
+                    <span>+${costBreakdown.agencyFee.toFixed(0)}</span>
                   </div>
                   <div className="pt-2 border-t border-white/10 flex justify-between items-center">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400">Grand Total</span>
