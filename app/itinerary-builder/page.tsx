@@ -10,10 +10,10 @@ import AIAssistantDrawer from '@/components/itinerary/AIAssistantDrawer';
 import { Save, Sparkles, Compass, Plus, Layers, MapPin, CheckCircle2, Loader2, Bot, ShoppingCart, Lock, Download, ChevronLeft, ChevronRight, CreditCard, Share2, Activity, AlertTriangle, Trash2, X, Receipt, Info, Truck } from 'lucide-react';
 import { saveItinerary } from '@/lib/services/itineraryService';
 import { validatePayload } from '@/lib/services/stagingValidator';
+import { analyzeItineraryPace } from '@/lib/services/itineraryAnalyzer';
 import { Day, ItineraryItem } from '@/lib/types/itinerary-types';
 import { ResidencyTier } from '@/lib/constants/index';
 import { supabase } from '@/lib/supabase/client';
-import { analyzeItineraryPace } from '@/lib/services/itineraryAnalyzer';
 
 const ItineraryMapOverlay = dynamic(() => import('@/components/itinerary/ItineraryMapOverlay'), { 
   ssr: false,
@@ -36,36 +36,6 @@ const getBaseRateForTier = (item: ItineraryItem | null, tier: ResidencyTier): nu
   return isNaN(parsed) ? 0 : parsed;
 };
 
-const getParkCoordinates = (name: string): { lat: number; lng: number; region: 'NORTHERN' | 'SOUTHERN' | 'ZANZIBAR' | 'COASTAL' } => {
-  const lower = name.toLowerCase();
-  
-  if (lower.includes('arusha') || lower.includes('tulia') || lower.includes('kikuletwa') || lower.includes('meru')) {
-    return { lat: -3.3667, lng: 36.6833, region: 'NORTHERN' };
-  }
-  if (lower.includes('kilimanjaro') || lower.includes('moshi')) return { lat: -3.3333, lng: 37.3333, region: 'NORTHERN' };
-  
-  if (lower.includes('marera') || lower.includes('karatu') || lower.includes('ngorongoro') || lower.includes('hellen')) {
-    return { lat: -3.3429, lng: 35.6713, region: 'NORTHERN' };
-  }
-  
-  if (lower.includes('serengeti') || lower.includes('balloon') || lower.includes('dougg') || lower.includes('seronera')) {
-    return { lat: -2.3333, lng: 34.8333, region: 'NORTHERN' };
-  }
-  if (lower.includes('tarangire')) return { lat: -3.8353, lng: 36.0125, region: 'NORTHERN' };
-  if (lower.includes('manyara')) return { lat: -3.5704, lng: 35.8175, region: 'NORTHERN' };
-  
-  if (lower.includes('ruaha')) return { lat: -7.5000, lng: 34.9167, region: 'SOUTHERN' };
-  if (lower.includes('selous') || lower.includes('nyerere')) return { lat: -7.8333, lng: 37.8333, region: 'SOUTHERN' };
-  if (lower.includes('mikumi')) return { lat: -7.4000, lng: 37.4000, region: 'SOUTHERN' };
-  if (lower.includes('katavi')) return { lat: -6.8333, lng: 31.1500, region: 'SOUTHERN' };
-  
-  if (lower.includes('zanzibar') || lower.includes('stone town') || lower.includes('nungwi') || lower.includes('paje') || lower.includes('mnemba') || lower.includes('jokerboat') || lower.includes('rib')) {
-    return { lat: -6.1659, lng: 39.2026, region: 'ZANZIBAR' };
-  }
-
-  return { lat: -3.3667, lng: 36.6833, region: 'NORTHERN' };
-};
-
 export default function SafariStudio() {
   const router = useRouter();
   const printRef = useRef<HTMLDivElement>(null);
@@ -75,11 +45,11 @@ export default function SafariStudio() {
 
   const addItemToStore = useItineraryStore((state) => state.addItem);
   const removeItemFromStore = useItineraryStore((state) => state.removeItem);
-  const getCostBreakdown = useItineraryStore((state) => state.getCostBreakdown);
   const storeTier = useItineraryStore((state) => state.tier);
   const setStoreTier = useItineraryStore((state) => state.setTier);
 
   const storeItems = useItineraryStore((state) => state.items);
+  const afterHoursItems = useItineraryStore((state) => (state as any).afterHoursItems || []);
 
   const [days, setDays] = useState<Day[]>([
     { 
@@ -141,8 +111,78 @@ export default function SafariStudio() {
   }, [days]);
 
   const costBreakdown = useMemo(() => {
-    return getCostBreakdown();
-  }, [getCostBreakdown, storeItems, storeTier, hasOwnVehicle]);
+    let subtotal = 0;
+    
+    // Track unique lodges per day for same-day deduplication
+    const billedLodgesPerDay = new Map<number, Set<string>>();
+
+    days.forEach(day => {
+      const dayLodges = new Set<string>();
+      day.slots.forEach(slot => {
+        if (!slot.item) return;
+        const item = slot.item;
+        const cat = String(item.category || '').toUpperCase();
+        const name = String(item.name || '').toLowerCase();
+        
+        const isLodge = cat === 'LODGES' || name.includes('lodge') || name.includes('camp') || name.includes('hotel') || name.includes('resort') || name.includes('hellen');
+        const rate = getBaseRateForTier(item, residencyTier);
+
+        if (isLodge) {
+          const lodgeKey = String(item.id || name).trim().toLowerCase();
+          if (!dayLodges.has(lodgeKey)) {
+            dayLodges.add(lodgeKey);
+            subtotal += rate;
+          }
+        } else {
+          subtotal += rate;
+        }
+      });
+      billedLodgesPerDay.set(day.day_number, dayLodges);
+    });
+
+    afterHoursItems.forEach((ah: any) => {
+      const rate = parseFloat(ah.price || ah.base_price || 0);
+      if (!isNaN(rate)) subtotal += rate;
+    });
+
+    // Check if any slot contains a Park, Safari, or Game Drive activity
+    const hasSafariOrParkActivity = allItineraryItems.some(slot => {
+      const cat = String(slot.item?.category || '').toUpperCase();
+      const name = String(slot.item?.name || '').toLowerCase();
+      const location = String(slot.item?.location || (slot.item as any)?.location_name || '').toLowerCase();
+      return (
+        cat === 'PARKS' || 
+        cat === 'SAFARIS' || 
+        cat === 'ACTIVITIES' ||
+        name.includes('park') || 
+        name.includes('safari') || 
+        name.includes('game drive') ||
+        name.includes('serengeti') || 
+        name.includes('ngorongoro') || 
+        name.includes('tarangire')
+      );
+    });
+
+    const hasAnyItems = allItineraryItems.length > 0 || afterHoursItems.length > 0;
+    const transport = (hasOwnVehicle || !hasSafariOrParkActivity) ? 0 : days.length * 350;
+    const vat = subtotal * 0.18;
+    const agencyFee = hasAnyItems ? (subtotal + transport) * 0.20 : 0;
+    const grandTotal = subtotal + transport + vat + agencyFee;
+
+    const notifications: string[] = [];
+    if (!hasAnyItems) {
+      notifications.push("Add items to your itinerary to calculate complete logistics and pricing.");
+    }
+
+    return {
+      subtotal,
+      transport,
+      vat,
+      agencyFee,
+      grandTotal,
+      notifications
+    };
+  }, [days, allItineraryItems, afterHoursItems, residencyTier, hasOwnVehicle]);
 
   const subtotalCost = costBreakdown.subtotal;
   const grandTotalCost = costBreakdown.grandTotal;
@@ -150,6 +190,7 @@ export default function SafariStudio() {
   const safariCarFee = costBreakdown.transport;
   const requiresSafariCar = safariCarFee > 0;
 
+  // Integrated Enterprise Chrono-Flow Analyzer Call
   const itineraryPaceScore = useMemo(() => {
     return analyzeItineraryPace(days, allItineraryItems);
   }, [days, allItineraryItems]);
@@ -164,7 +205,10 @@ export default function SafariStudio() {
   }, [allItineraryItems]);
 
   const handleCheckoutAttempt = () => {
-    if (itineraryPaceScore.score < 50) {
+    if (allItineraryItems.length === 0 && afterHoursItems.length === 0) {
+      return;
+    }
+    if (itineraryPaceScore.score < 40) {
       setLogisticalWarningModal({
         open: true,
         message: itineraryPaceScore.label,
@@ -191,61 +235,160 @@ export default function SafariStudio() {
     }));
   };
 
-  const handleAddItemDirectly = (item: ItineraryItem, specifiedDayNumber?: number, specifiedSlotType?: 'MORNING' | 'AFTERNOON' | 'EVENING') => {
+  const handleAddItemDirectly = (
+    item: ItineraryItem, 
+    specifiedDayNumber?: number | string | any, 
+    specifiedSlotType?: any
+  ) => {
     if (!isAuthenticated) return;
+
     const baseRate = getBaseRateForTier(item, residencyTier);
 
-    let targetDayId: string | null = null;
-    let targetSlotId: string | null = null;
-    let targetSlotType: 'MORNING' | 'AFTERNOON' | 'EVENING' = specifiedSlotType || 'MORNING';
-    let targetDayNumber = specifiedDayNumber || 1;
-
-    const targetDay = days.find(d => d.day_number === targetDayNumber) || days[0];
-    if (targetDay) {
-      targetDayId = targetDay.id;
-      targetDayNumber = targetDay.day_number;
-      
-      const targetSlot = targetDay.slots.find(s => s.type === targetSlotType);
-      if (targetSlot) {
-        targetSlotId = targetSlot.id;
-      } else {
-        const emptySlot = targetDay.slots.find(s => s.item === null) || targetDay.slots[0];
-        targetSlotId = emptySlot.id;
-        targetSlotType = emptySlot.type as any;
+    let parsedDayNum = 1;
+    const extractDayFromVal = (val: any): number | null => {
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const match = val.match(/\d+/);
+        if (match) return parseInt(match[0], 10);
       }
+      if (val && typeof val === 'object') {
+        const candidate = val.targetDay ?? val.dayNumber ?? val.day ?? val.day_number ?? val.selectedDay;
+        if (candidate !== undefined && candidate !== null) {
+          if (typeof candidate === 'number') return candidate;
+          const match = String(candidate).match(/\d+/);
+          if (match) return parseInt(match[0], 10);
+        }
+      }
+      return null;
+    };
+
+    const foundDay = extractDayFromVal(specifiedDayNumber) ?? extractDayFromVal(specifiedSlotType) ?? extractDayFromVal(item);
+    if (foundDay !== null && foundDay > 0) {
+      parsedDayNum = foundDay;
     }
 
-    if (!targetDayId || !targetSlotId) return;
+    const extractSlotFromVal = (val: any): string => {
+      if (typeof val === 'string') {
+        const upper = val.trim().toUpperCase();
+        if (upper.includes('AFTERNOON') || upper.includes('EVENING') || upper.includes('NIGHT') || upper.includes('MORNING') || upper.includes('AM') || upper.includes('PM')) {
+          return val;
+        }
+      }
+      if (val && typeof val === 'object') {
+        return val.timeSlot || val.slot || val.type || val.value || val.selectedSlot || '';
+      }
+      return '';
+    };
 
-    handleMoveItem(targetDayId, targetSlotId, item);
-    addItemToStore({
-      ...item,
-      id: item.id,
-      originalId: item.id,
-      price: baseRate,
-      slotId: targetSlotId,
-      timeSlot: targetSlotType,
-    } as any, targetDayNumber, targetSlotType);
+    const rawSlotString = extractSlotFromVal(specifiedSlotType) || extractSlotFromVal(specifiedDayNumber) || extractSlotFromVal(item) || (item as any)?.timeSlot || '';
 
-    setAiActivityNotice(`✨ Added ${item.name} to Day ${targetDayNumber} (${targetSlotType})!`);
+    const upperSlot = String(rawSlotString).trim().toUpperCase();
+    let normalizedSlotType: 'MORNING' | 'AFTERNOON' | 'EVENING' = 'MORNING';
+    if (upperSlot.includes('AFTERNOON')) {
+      normalizedSlotType = 'AFTERNOON';
+    } else if (upperSlot.includes('EVENING') || upperSlot.includes('NIGHT')) {
+      normalizedSlotType = 'EVENING';
+    } else if (upperSlot.includes('MORNING') || upperSlot.includes('AM')) {
+      normalizedSlotType = 'MORNING';
+    }
+
+    setDays(prevDays => {
+      let currentDays = [...prevDays];
+
+      while (currentDays.length < parsedDayNum) {
+        const newDayNum = currentDays.length + 1;
+        currentDays.push({
+          id: crypto.randomUUID(),
+          day_number: newDayNum,
+          location: `Expedition Day ${newDayNum}`,
+          slots: [
+            { id: crypto.randomUUID(), type: 'MORNING', item: null, name: null, location: { lat: null, lng: null } },
+            { id: crypto.randomUUID(), type: 'AFTERNOON', item: null, name: null, location: { lat: null, lng: null } },
+            { id: crypto.randomUUID(), type: 'EVENING', item: null, name: null, location: { lat: null, lng: null } }
+          ]
+        });
+      }
+
+      return currentDays.map(d => {
+        if (d.day_number !== parsedDayNum) return d;
+
+        return {
+          ...d,
+          slots: d.slots.map(s => {
+            if (s.type !== normalizedSlotType) return s;
+
+            if (s.item?.id) {
+              removeItemFromStore(s.item.id);
+            }
+
+            addItemToStore({
+              ...item,
+              id: item.id,
+              originalId: item.id,
+              price: baseRate,
+              slotId: s.id,
+              timeSlot: normalizedSlotType,
+            } as any, parsedDayNum, normalizedSlotType);
+
+            return {
+              ...s,
+              item,
+              name: item.name,
+              location: { lat: item.lat ?? null, lng: item.lng ?? null }
+            };
+          })
+        };
+      });
+    });
+
+    setAiActivityNotice(`✨ Placed ${item.name} in Day ${parsedDayNum} (${normalizedSlotType})!`);
     setTimeout(() => setAiActivityNotice(null), 3000);
   };
 
-  const handleRemoveItem = (dayId: string, slotId: string) => {
-    const targetDay = days.find(d => d.id === dayId);
-    const targetSlot = targetDay?.slots.find(s => s.id === slotId);
-
+  const handleRemoveItem = (dayIdOrNumber?: string | number | any, slotIdOrType?: string | any) => {
     setDays(prevDays => prevDays.map(d => {
-      if (d.id !== dayId) return d;
-      return { 
-        ...d, 
-        slots: d.slots.map(s => s.id === slotId ? { ...s, item: null, name: null, location: { lat: null, lng: null } } : s)
+      let isTargetDay = false;
+      if (typeof dayIdOrNumber === 'string' || typeof dayIdOrNumber === 'number') {
+        isTargetDay = d.id === dayIdOrNumber || d.day_number === Number(dayIdOrNumber);
+      } else if (dayIdOrNumber && typeof dayIdOrNumber === 'object') {
+        const targetNum = dayIdOrNumber.targetDay ?? dayIdOrNumber.dayNumber ?? dayIdOrNumber.day ?? dayIdOrNumber.day_number;
+        isTargetDay = targetNum !== undefined ? d.day_number === Number(targetNum) : true;
+      } else {
+        return d;
+      }
+
+      if (!isTargetDay) return d;
+
+      return {
+        ...d,
+        slots: d.slots.map(s => {
+          let matchesSlot = false;
+          if (typeof slotIdOrType === 'string') {
+            const upper = slotIdOrType.trim().toUpperCase();
+            if (upper === 'MORNING' || upper === 'AFTERNOON' || upper === 'EVENING' || upper === 'NIGHT') {
+              matchesSlot = s.type === upper;
+            } else {
+              matchesSlot = s.id === slotIdOrType || s.item?.id === slotIdOrType;
+            }
+          } else if (slotIdOrType && typeof slotIdOrType === 'object') {
+            matchesSlot = s.id === slotIdOrType.id || s.id === slotIdOrType.slotId || s.type === slotIdOrType.type;
+          }
+
+          if (matchesSlot) {
+            if (s.item?.id) {
+              removeItemFromStore(s.item.id);
+            }
+            return {
+              ...s,
+              item: null,
+              name: null,
+              location: { lat: null, lng: null }
+            };
+          }
+          return s;
+        })
       };
     }));
-
-    if (targetSlot?.item?.id) {
-      removeItemFromStore(targetSlot.item.id);
-    }
   };
 
   const handleDeleteDay = (dayId: string) => {
@@ -325,7 +468,7 @@ export default function SafariStudio() {
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="xl:hidden absolute bottom-0 left-0 right-0 z-40 bg-slate-900/90 backdrop-blur-lg border-t border-white/10 px-4 py-3 flex items-center justify-around pointer-events-auto">
+      <div className="xl:hidden absolute bottom-0 left-0 right-0 z-40 bg-slate-900/90 backdrop-blur-lg border-t border-white/10 px-4 py-3 flex items-center justify-around pointer-events-auto touch-manipulation">
         <button 
           type="button"
           onClick={() => setMobileActiveTab('timeline')}
@@ -371,7 +514,7 @@ export default function SafariStudio() {
           <button
             type="button"
             onClick={() => setIsStudioOpen(true)}
-            className="absolute left-0 z-30 bg-slate-900/90 hover:bg-slate-900 border border-amber-500/40 text-amber-400 p-3 rounded-r-2xl shadow-2xl backdrop-blur-md flex items-center gap-2 transition-all hover:scale-105 cursor-pointer"
+            className="absolute left-0 z-30 bg-slate-900/90 hover:bg-slate-900 border border-amber-500/40 text-amber-400 p-3 rounded-r-2xl shadow-2xl backdrop-blur-md flex items-center gap-2 transition-all hover:scale-105 cursor-pointer touch-manipulation"
             title="Open Studio"
           >
             <ChevronRight size={18} className="animate-pulse" />
@@ -392,7 +535,7 @@ export default function SafariStudio() {
                 <button 
                   type="button"
                   onClick={() => router.push('/login')}
-                  className="px-6 py-3 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider hover:bg-amber-300 transition-all shadow-lg cursor-pointer"
+                  className="px-6 py-3 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider hover:bg-amber-300 transition-all shadow-lg cursor-pointer touch-manipulation"
                 >
                   Sign In to Access Builder
                 </button>
@@ -418,7 +561,7 @@ export default function SafariStudio() {
                   type="button"
                   onClick={handleExportPDF}
                   disabled={pdfStatus === 'generating'}
-                  className={`flex items-center gap-1 px-2.5 py-2 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer ${
+                  className={`flex items-center gap-1 px-2.5 py-2 rounded-xl font-bold text-xs tracking-wider uppercase transition-all shadow-lg cursor-pointer touch-manipulation ${
                     pdfStatus === 'success' ? 'bg-emerald-500 text-slate-950 shadow-lg' : 'bg-white/10 hover:bg-white/20 text-slate-300'
                   }`}
                   title="Download Professional Itinerary PDF"
@@ -432,7 +575,7 @@ export default function SafariStudio() {
                 <button
                   type="button"
                   onClick={handleShareLink}
-                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer relative"
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition-all cursor-pointer relative touch-manipulation"
                   title="Share Itinerary Link"
                 >
                   <Share2 size={14} />
@@ -447,7 +590,7 @@ export default function SafariStudio() {
                   <button
                     type="button"
                     onClick={() => setIsStudioOpen(false)}
-                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-all cursor-pointer"
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-all cursor-pointer touch-manipulation"
                     title="Close Studio"
                   >
                     <X size={16} />
@@ -473,7 +616,7 @@ export default function SafariStudio() {
               <button
                 type="button"
                 onClick={() => setIsAiOpen(true)}
-                className="px-3 py-2 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-400 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition shrink-0 cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-400 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition shrink-0 cursor-pointer touch-manipulation"
               >
                 <Sparkles size={14} />
                 <span>AI Assistant</span>
@@ -495,7 +638,7 @@ export default function SafariStudio() {
               <button
                 type="button"
                 onClick={addDay}
-                className="w-full py-3.5 border border-dashed border-white/20 hover:border-amber-400/65 rounded-2xl text-slate-400 hover:text-amber-400 text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all bg-white/5 hover:bg-white/10 cursor-pointer"
+                className="w-full py-3.5 border border-dashed border-white/20 hover:border-amber-400/65 rounded-2xl text-slate-400 hover:text-amber-400 text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all bg-white/5 hover:bg-white/10 cursor-pointer touch-manipulation"
               >
                 <Plus size={16} />
                 <span>Add Expedition Day</span>
@@ -506,7 +649,7 @@ export default function SafariStudio() {
               <button
                 type="button"
                 onClick={() => setIsCartModalOpen(true)}
-                className="w-full py-3 px-4 rounded-2xl bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/40 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-between transition-all shadow-lg cursor-pointer group"
+                className="w-full py-3 px-4 rounded-2xl bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/40 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-between transition-all shadow-lg cursor-pointer group touch-manipulation"
               >
                 <div className="flex items-center gap-2.5">
                   <ShoppingCart size={18} className="text-amber-400 group-hover:scale-110 transition-transform" />
@@ -532,7 +675,7 @@ export default function SafariStudio() {
             <button
               type="button"
               onClick={() => setIsPortfolioOpen(true)}
-              className="flex items-center gap-2 px-4 py-3 bg-slate-900/90 hover:bg-slate-900 border border-amber-500/40 text-amber-400 rounded-l-2xl shadow-2xl backdrop-blur-md transition-all hover:scale-105 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-3 bg-slate-900/90 hover:bg-slate-900 border border-amber-500/40 text-amber-400 rounded-l-2xl shadow-2xl backdrop-blur-md transition-all hover:scale-105 cursor-pointer touch-manipulation"
               title="Open Portfolio"
             >
               <Compass size={18} className="animate-spin text-amber-400" />
@@ -548,6 +691,7 @@ export default function SafariStudio() {
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               <ItineraryCategoryExplorer
                 onAddItem={handleAddItemDirectly}
+                onRemoveItem={handleRemoveItem}
                 residencyTier={residencyTier}
                 onTierChange={handleTierChange}
                 isOpen={isPortfolioOpen}
@@ -603,7 +747,7 @@ export default function SafariStudio() {
               <button
                 type="button"
                 onClick={handleCheckoutAttempt}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer touch-manipulation"
               >
                 <CreditCard size={15} />
                 <span>Proceed to Secure Checkout</span>
@@ -630,44 +774,64 @@ export default function SafariStudio() {
               <button
                 type="button"
                 onClick={() => setIsCartModalOpen(false)}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-all cursor-pointer"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-all cursor-pointer touch-manipulation"
               >
                 <X size={18} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto py-4 space-y-3 custom-scrollbar pr-1">
-              {allItineraryItems.length === 0 ? (
+              {allItineraryItems.length === 0 && afterHoursItems.length === 0 ? (
                 <div className="text-center py-12">
                   <ShoppingCart size={40} className="mx-auto text-slate-600 mb-3" />
                   <p className="text-sm font-bold text-slate-400">Your cart manifest is currently empty.</p>
                   <p className="text-xs text-slate-500 mt-1">Add items from the explorer catalog to begin building your safari.</p>
                 </div>
               ) : (
-                allItineraryItems.map((slot, index) => {
-                  const rate = getBaseRateForTier(slot.item, residencyTier);
-                  return (
-                    <div key={`${slot.item.id}-${index}`} className="bg-slate-950/60 border border-white/10 rounded-2xl p-3.5 flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">
-                          Day {slot.dayNumber} • {slot.type}
-                        </span>
-                        <h4 className="text-xs font-bold text-white truncate mt-1">{slot.item.name}</h4>
-                        <p className="text-[10px] text-slate-400 truncate">{slot.item.location_name || 'Tanzania Safari Experience'}</p>
+                <>
+                  {allItineraryItems.map((slot, index) => {
+                    const rate = getBaseRateForTier(slot.item, residencyTier);
+                    return (
+                      <div key={`${slot.item.id}-${index}`} className="bg-slate-950/60 border border-white/10 rounded-2xl p-3.5 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">
+                            Day {slot.dayNumber} • {slot.type}
+                          </span>
+                          <h4 className="text-xs font-bold text-white truncate mt-1">{slot.item.name}</h4>
+                          <p className="text-[10px] text-slate-400 truncate">{slot.item.location_name || 'Tanzania Safari Experience'}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-black text-amber-400">${rate.toFixed(0)}</span>
+                          <div className="text-[9px] text-slate-500 uppercase">{residencyTier} Rate</div>
+                        </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-xs font-black text-amber-400">${rate.toFixed(0)}</span>
-                        <div className="text-[9px] text-slate-500 uppercase">{residencyTier} Rate</div>
+                    );
+                  })}
+
+                  {afterHoursItems.map((ah: any, index: number) => {
+                    const rate = parseFloat(ah.price || ah.base_price || 0);
+                    return (
+                      <div key={`ah-${ah.id || index}`} className="bg-slate-950/60 border border-amber-500/20 rounded-2xl p-3.5 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            After Hours / Bush Party
+                          </span>
+                          <h4 className="text-xs font-bold text-white truncate mt-1">{ah.name}</h4>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-black text-amber-400">${rate.toFixed(0)}</span>
+                          <div className="text-[9px] text-slate-500 uppercase">After Hours</div>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </>
               )}
 
               {requiresSafariCar && (
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-500/30">
                       Chrono-Flow Logistics
                     </span>
                     <h4 className="text-xs font-bold text-white truncate mt-1">4x4 Safari Cruiser & Driver Guide</h4>
@@ -681,7 +845,7 @@ export default function SafariStudio() {
               )}
             </div>
 
-            {allItineraryItems.length > 0 && (
+            {(allItineraryItems.length > 0 || afterHoursItems.length > 0) && (
               <div className="pt-4 border-t border-white/15 space-y-3">
                 {deduplicationNotices.length > 0 && (
                   <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-2.5 flex items-start gap-2 text-amber-300 text-[11px] shadow-lg">
@@ -719,7 +883,7 @@ export default function SafariStudio() {
                     setIsCartModalOpen(false);
                     handleCheckoutAttempt();
                   }}
-                  className="w-full py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition shadow-xl cursor-pointer"
+                  className="w-full py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition shadow-xl cursor-pointer touch-manipulation"
                 >
                   <CreditCard size={16} />
                   <span>Proceed to Secure Checkout</span>
@@ -745,7 +909,7 @@ export default function SafariStudio() {
               <button
                 type="button"
                 onClick={() => setLogisticalWarningModal(null)}
-                className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+                className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 font-bold text-xs uppercase tracking-wider transition cursor-pointer touch-manipulation"
               >
                 Review Itinerary
               </button>
@@ -755,7 +919,7 @@ export default function SafariStudio() {
                   setLogisticalWarningModal(null);
                   router.push('/checkout');
                 }}
-                className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-black text-xs uppercase tracking-wider transition shadow-lg cursor-pointer"
+                className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-black text-xs uppercase tracking-wider transition shadow-lg cursor-pointer touch-manipulation"
               >
                 Proceed Anyway
               </button>
